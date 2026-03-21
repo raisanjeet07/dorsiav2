@@ -1,0 +1,31 @@
+# Build artifacts
+bin/
+*.exe
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Docs / non-essential
+*.md
+*.docx
+*.postman_collection.json
+CLI-Agent-Gateway-Architecture.*
+
+# Config (user mounts their own)
+config.json
+
+# Scripts not needed at build time
+scripts/deploy.sh

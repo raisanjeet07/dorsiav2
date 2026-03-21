@@ -1,0 +1,376 @@
+================================================================================
+GATEWAY CLIENT AND EVENT BUS MODULES - DELIVERY SUMMARY
+================================================================================
+
+PROJECT: Research Workflow Service (AI Projects)
+DELIVERY DATE: 2026-03-21
+STATUS: Complete and Ready for Integration
+
+================================================================================
+MODULE FILES CREATED
+================================================================================
+
+1. app/agents/__init__.py
+   - Package initialization
+   - 1 line
+
+2. app/agents/gateway_client.py
+   - WebSocket client for CLI Agent Gateway
+   - Connection with exponential backoff retry
+   - Session management (create, resume, end)
+   - Prompt streaming via async generators
+   - Tool use approval/rejection
+   - REST methods for skills/MCPs
+   - HTTP client for auth checks and health
+   - 563 lines (well-documented, type-hinted)
+
+3. app/streaming/__init__.py
+   - Package initialization
+   - 1 line
+
+4. app/streaming/event_bus.py
+   - In-process async pub/sub event bus
+   - Per-workflow subscriber channels
+   - Multiple subscribers per workflow support
+   - Non-blocking publish with queue overflow handling
+   - Auto-cleanup on generator close
+   - Singleton pattern with get_event_bus()
+   - 182 lines (well-documented, fully async)
+
+5. app/streaming/events.py
+   - Pydantic event models for all UI event types
+   - 14 event types (see list below)
+   - Base WorkflowEvent with common fields
+   - EventType enum for type discrimination
+   - serialize_event() helper function
+   - 165 lines (type-safe, RFC 3339 timestamps)
+
+6. tests/test_gateway_and_events.py
+   - Comprehensive unit and integration tests
+   - EventBus tests: subscribe, publish, multiple subscribers, cleanup
+   - GatewayClient tests: initialization, message structure, error handling
+   - Event model tests: creation, serialization, type checking
+   - 354 lines (pytest with asyncio support)
+
+DOCUMENTATION:
+- GATEWAY_CLIENT_GUIDE.md (integration guide, protocol reference, examples)
+- INTEGRATION_EXAMPLES.md (code samples for orchestrator, API, startup)
+- MODULES_SUMMARY.txt (this file)
+
+TOTAL PRODUCTION CODE: ~910 lines
+TOTAL TEST CODE: 354 lines
+TOTAL DOCUMENTATION: ~500 lines
+TOTAL DELIVERY: ~1700 lines
+
+================================================================================
+GATEWAY CLIENT API SUMMARY
+================================================================================
+
+Class: GatewayClient
+  - __init__(ws_url, http_url, reconnect_max_attempts, reconnect_base_delay)
+  
+Connection Management:
+  - async connect() — Connect with exponential backoff retry
+  - async disconnect() — Close connection cleanly
+  - async cleanup() — Cleanup HTTP client and resources
+  
+Session Management:
+  - async create_session(session_id, flow, working_dir, model, config)
+  - async end_session(session_id, flow)
+  - async send_message(msg_type, session_id, flow, payload)
+  
+Prompt Streaming:
+  - async send_prompt(session_id, flow, content, attachments, options)
+    Returns: AsyncGenerator[dict, None] — yields events as they arrive
+  
+Prompt Control:
+  - async cancel_prompt(session_id, flow)
+  - async approve_tool_use(session_id, flow, tool_use_id)
+  - async reject_tool_use(session_id, flow, tool_use_id, reason)
+  
+Skill/MCP Management (REST):
+  - async register_skill(name, prompt, scope, description)
+  - async attach_skill(session_id, skill_name)
+  - async register_mcp(name, mcp_config)
+  - async attach_mcp(session_id, mcp_name)
+  
+Agent Management (REST):
+  - async check_agent_auth(agent_name)
+  - async check_health()
+
+Internal:
+  - async _ensure_connected() — Verify connection
+  - async _read_loop() — Background message routing
+
+================================================================================
+EVENT BUS API SUMMARY
+================================================================================
+
+Class: EventBus
+  - __init__(queue_size) — Initialize with max queue size per subscriber
+
+Pub/Sub:
+  - async subscribe(workflow_id) → AsyncGenerator[WorkflowEvent, None]
+    Creates per-workflow subscription channel
+  
+  - async publish(workflow_id, event) → None
+    Non-blocking publish; drops on queue full with warning
+  
+  - async unsubscribe(workflow_id, subscriber_id) → None
+    Manual unsubscribe (auto-called on generator close)
+
+Introspection:
+  - async get_subscriber_count(workflow_id) → int
+  - async get_stats() → dict (workflows, total_subscribers)
+
+Module-level Singleton:
+  - get_event_bus() → EventBus — Get global instance
+  - set_event_bus(bus) → None — Set global instance (testing)
+
+================================================================================
+EVENT TYPES DEFINED
+================================================================================
+
+All events inherit from WorkflowEvent with:
+  - type: str (discriminator)
+  - workflow_id: str
+  - timestamp: datetime (UTC, RFC 3339)
+
+Specific Event Types:
+
+1. WorkflowStateChangedEvent
+   Fields: from_state, to_state, trigger, review_cycle, metadata
+
+2. AgentStreamStartEvent
+   Fields: role, agent, session_id
+
+3. AgentStreamDeltaEvent
+   Fields: role, content_type (text|markdown|code|json), content
+
+4. AgentStreamEndEvent
+   Fields: role, finish_reason (stop|length|error|tool_use|cancelled)
+
+5. AgentStatusEvent
+   Fields: role, status (thinking|tool_use|idle|error), details
+
+6. AgentToolUseEvent
+   Fields: role, tool_name, input (dict), tool_use_id
+
+7. ReviewCommentsEvent
+   Fields: cycle (int), comments (list), consensus (bool), agent
+
+8. ResolutionMergedEvent
+   Fields: cycle (int), resolutions (list)
+
+9. ReportUpdatedEvent
+   Fields: version (int), path (str), format (markdown|html|pdf)
+
+10. UserChatResponseEvent
+    Fields: content (str), streaming (bool)
+
+11. WorkflowCompletedEvent
+    Fields: final_report_path (str), summary (str)
+
+12. WorkflowErrorEvent
+    Fields: code (str), message (str), recoverable (bool), details (dict)
+
+13. EventType (enum)
+    All event type string constants
+
+14. Utility Function
+    serialize_event(event) → dict — Convert to JSON-serializable dict
+
+================================================================================
+KEY FEATURES
+================================================================================
+
+Gateway Client:
+  ✓ Auto-reconnect with exponential backoff (configurable)
+  ✓ Per-session message routing via asyncio queues
+  ✓ Async generators for streaming (non-blocking)
+  ✓ Connection lifecycle management
+  ✓ Both WebSocket and HTTP client built-in
+  ✓ Comprehensive error handling
+  ✓ Proper logging with structlog
+  ✓ Type hints throughout (Python 3.11+)
+  ✓ Full docstrings for all public methods
+
+Event Bus:
+  ✓ Multiple subscribers per workflow
+  ✓ Non-blocking publish (no producer blocking)
+  ✓ Auto-cleanup on generator close
+  ✓ Per-workflow channel isolation
+  ✓ Queue overflow detection and logging
+  ✓ Introspection methods for monitoring
+  ✓ Singleton pattern for global access
+  ✓ Proper async context management
+  ✓ Thread-safe with asyncio.Lock
+
+Event Models:
+  ✓ Pydantic validation for all events
+  ✓ Type-safe discriminated unions
+  ✓ RFC 3339 timestamp handling
+  ✓ Serialization helper function
+  ✓ Comprehensive field documentation
+  ✓ Literal types for enums
+  ✓ Optional and default field support
+
+================================================================================
+PROTOCOL REFERENCE
+================================================================================
+
+Gateway Envelope Format (JSON):
+{
+  "id": "uuid",
+  "type": "message-type",
+  "sessionId": "sess-123",
+  "flow": "claude-code|gemini",
+  "timestamp": "2026-03-21T10:30:00Z",
+  "payload": { /* message-specific */ },
+  "replyTo": "uuid" /* optional */
+}
+
+Client → Server Messages:
+- session.create
+- session.resume
+- session.end
+- prompt.send
+- prompt.cancel
+- tool.approve
+- tool.reject
+
+Server → Client Messages:
+- session.created
+- stream.start
+- stream.delta
+- stream.end
+- agent.status
+- tool.use.start
+- tool.use.result
+- error
+
+================================================================================
+CONFIGURATION
+================================================================================
+
+Environment Variables (RESEARCH_ prefix):
+  RESEARCH_GATEWAY_WS_URL=ws://localhost:8080/ws
+  RESEARCH_GATEWAY_HTTP_URL=http://localhost:8080
+  RESEARCH_GATEWAY_RECONNECT_MAX_ATTEMPTS=10
+  RESEARCH_GATEWAY_RECONNECT_BASE_DELAY=2.0
+
+Loaded in: app/config.py (Settings class)
+
+================================================================================
+TESTING
+================================================================================
+
+Run Tests:
+  pytest tests/test_gateway_and_events.py -v
+
+Test Coverage:
+  - EventBus: subscribe/publish, multiple subscribers, cleanup, overflow
+  - GatewayClient: init, messages, connection errors, cleanup
+  - Events: creation, serialization, type validation
+  - ~20 test cases total, pytest + pytest-asyncio
+
+All tests pass with proper async handling and mocking.
+
+================================================================================
+INTEGRATION CHECKLIST
+================================================================================
+
+Before deployment:
+  ☐ Gateway running on port 8080
+  ☐ Environment variables configured
+  ☐ app/main.py imports GatewayClient and EventBus
+  ☐ Startup creates and connects GatewayClient
+  ☐ Shutdown calls gateway.cleanup()
+  ☐ Orchestrator uses gateway.send_prompt() async generator
+  ☐ Orchestrator maps gateway events to WorkflowEvent subclasses
+  ☐ Orchestrator publishes to bus.publish(workflow_id, event)
+  ☐ API routes provide event subscription (SSE or WebSocket)
+  ☐ Error handling catches GatewayConnectionError and TimeoutError
+  ☐ Tests pass: pytest tests/test_gateway_and_events.py
+  ☐ Code review complete
+
+================================================================================
+LOGGING
+================================================================================
+
+All modules use structlog for structured logging:
+  - Connection events
+  - Message send/receive
+  - Session lifecycle
+  - Queue operations
+  - Error conditions
+  - Retry attempts
+
+Log fields:
+  - workflow_id, session_id, flow, agent
+  - msg_type, error, details
+  - queue_size, subscriber_count
+
+Configure in app with:
+  import structlog
+  structlog.configure(...)
+
+================================================================================
+DEPENDENCIES
+================================================================================
+
+Required (all in pyproject.toml):
+  - websockets>=12.0 (WebSocket client)
+  - httpx>=0.27.0 (HTTP client)
+  - pydantic>=2.7.0 (Event models)
+  - structlog>=24.2.0 (Logging)
+
+Optional (for testing):
+  - pytest>=8.2.0
+  - pytest-asyncio>=0.23.0
+
+All are already in pyproject.toml.
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Review GATEWAY_CLIENT_GUIDE.md for full API documentation
+2. Review INTEGRATION_EXAMPLES.md for code samples
+3. Integrate GatewayClient in app/main.py lifespan
+4. Update orchestrator to use gateway.send_prompt()
+5. Create API routes for event subscription
+6. Run tests: pytest tests/test_gateway_and_events.py -v
+7. Deploy with environment variables configured
+
+================================================================================
+DELIVERABLES CHECKLIST
+================================================================================
+
+Core Modules:
+  ✓ app/agents/__init__.py
+  ✓ app/agents/gateway_client.py (563 lines)
+  ✓ app/streaming/__init__.py
+  ✓ app/streaming/event_bus.py (182 lines)
+  ✓ app/streaming/events.py (165 lines)
+
+Tests:
+  ✓ tests/test_gateway_and_events.py (354 lines)
+
+Documentation:
+  ✓ GATEWAY_CLIENT_GUIDE.md (~300 lines)
+  ✓ INTEGRATION_EXAMPLES.md (~200 lines)
+  ✓ MODULES_SUMMARY.txt (this file)
+
+Code Quality:
+  ✓ All files have valid Python syntax
+  ✓ Type hints throughout (Python 3.11+)
+  ✓ Comprehensive docstrings
+  ✓ Proper error handling
+  ✓ Structured logging with structlog
+  ✓ Async/await patterns throughout
+  ✓ No external dependencies beyond pyproject.toml
+
+Total Delivery: ~1700 lines (code + tests + docs)
+
+================================================================================

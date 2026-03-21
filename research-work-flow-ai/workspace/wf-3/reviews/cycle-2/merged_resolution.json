@@ -1,0 +1,48 @@
+{
+  "cycle": 2,
+  "resolutions": [
+    {
+      "comment_id": "MAJOR-4",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Restated the George & Williams (2003) finding to accurately reflect that the 18% figure refers to externally assessed functional acceptance test pass rates, not an internal count of tests written, and added clarifying context."
+    },
+    {
+      "comment_id": "MAJOR-3",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced the informal inline source list with a full References section using consistent APA-style formatting including journal, volume, issue, page range, and DOI for each source. Added entries for the two new post-2010 studies."
+    },
+    {
+      "comment_id": "MINOR-7",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Named the red-green-refactor cycle explicitly in the Introduction immediately after describing the three steps, aligning with standard TDD literature terminology."
+    },
+    {
+      "comment_id": "MINOR-6",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded the CI/CD recommendation in Section 5 with one actionable sentence on test pyramid composition to guide teams on granularity within a pipeline."
+    },
+    {
+      "comment_id": "MINOR-5",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added a qualifier to the 'living documentation' bullet in Section 3 to note that this benefit depends on tests being written at the behavioral level, connecting it to the caveat already present in Section 5."
+    },
+    {
+      "comment_id": "CRITICAL-1",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Updated Executive Summary defect reduction figure from '40\u201380%' to '40\u201390%' to match Nagappan et al. (2008) as cited in Section 3 and the evidence table."
+    },
+    {
+      "comment_id": "MAJOR-2",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded the evidence table with two post-2010 sources: Rafique & Mi\u0161i\u0107 (2013) meta-analysis and Causevic et al. (2012) systematic review, to broaden the evidence base beyond the original three dated studies."
+    }
+  ],
+  "merged_at": "2026-03-21T10:30:44.068778+00:00"
+}

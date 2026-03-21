@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: AgentProfile
+metadata:
+  name: claude-code
+  description: "Claude Code CLI agent via the CLI Agent Gateway"
+  version: "1.0.0"
+
+spec:
+  gatewayFlow: claude-code
+
+  defaults:
+    mode: bypassPermissions
+    model: claude-sonnet-4-6
+    connectionMode: spawn
+
+  supportedModes:
+    - default
+    - acceptEdits
+    - bypassPermissions
+    - dontAsk
+    - plan
+    - auto
+
+  personaApplication:
+    method: skill
+
+  capabilityApplication:
+    skills: merge
+    mcps: attach
+
+  promptTemplate: |
+    {persona_prompt}
+
+    {capability_prompts}
+
+    IMPORTANT: Follow the output schema exactly. Output valid JSON when a structured format is requested.
+
+  healthCheck:
+    endpoint: /agents/claude-code/auth
+    field: loggedIn
+    expectedValue: true

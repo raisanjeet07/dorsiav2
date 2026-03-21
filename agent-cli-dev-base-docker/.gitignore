@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+
+# Local copies of host CLI auth (sensitive)
+host-cli-auth-bundle/
+host-cli-auth-bundle.tar.gz

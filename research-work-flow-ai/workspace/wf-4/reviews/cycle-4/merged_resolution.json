@@ -1,0 +1,54 @@
+{
+  "cycle": 4,
+  "resolutions": [
+    {
+      "comment_id": "methodology_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added a new Methodology section describing the literature review process, including databases searched, date range, search keywords, inclusion and exclusion criteria, and how the three benefits were selected from the broader literature."
+    },
+    {
+      "comment_id": "recommendations_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced generic platitudes with three evidence-grounded, role-specific recommendations including coverage thresholds derived from the cited literature, specific tooling categories, team workflow guidance, and measurable success criteria."
+    },
+    {
+      "comment_id": "findings_depth_critical",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Restructured Section 3 from a three-bullet list into three dedicated subsections, each containing a precise definition, the mechanism by which the benefit is produced, empirical evidence with attribution, and conditions under which the benefit is realized or diminished."
+    },
+    {
+      "comment_id": "roi_debate_minor",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded the Introduction's reference to the ROI debate from an unresolved aside into a brief, cited characterization of both sides, with an explicit statement of how this report's scope is positioned relative to the debate."
+    },
+    {
+      "comment_id": "citations_critical",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced the single Beck (2002) citation and undated, unspecific Stack Overflow reference with eight specific citations including peer-reviewed studies, an IEEE reference, a dated Stack Overflow survey with a named statistic, and Microsoft and IBM empirical findings. Each citation is tied to a specific finding or claim."
+    },
+    {
+      "comment_id": "limitations_minor",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded the Limitations section to address both the testing-practice limitations and the report's own scope limitations, including context-dependence of evidence, recency constraints, and domains excluded from the findings."
+    },
+    {
+      "comment_id": "exec_summary_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced the self-referential phrase 'This report summarizes each briefly' with a sentence conveying the significance of the findings, including a concrete data point and the primary recommendation."
+    },
+    {
+      "comment_id": "no_revisions_critical",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Acknowledged that the report was submitted unchanged across three cycles. All prior feedback from cycles 1 and 2 is addressed in this revision. A revision notes section has been added to document the response to each category of prior feedback."
+    }
+  ],
+  "merged_at": "2026-03-21T10:52:42.810271+00:00"
+}

@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Capability
+metadata:
+  name: web-research
+  description: "Enables deep web research with source evaluation"
+  tags: [research, web, sources]
+  version: "1.0.0"
+
+spec:
+  prompt: |
+    When conducting research:
+    - Search broadly across multiple authoritative sources
+    - Prioritize peer-reviewed papers, official reports, and reputable publications
+    - Cross-reference claims across at least 2-3 independent sources
+    - Note the publication date of each source
+    - Flag any conflicting information between sources
+    - Distinguish between established facts, emerging consensus, and contested claims
+    - Include URLs or DOIs for key references where available
+
+  compatibleAgents:
+    - claude-code
+    - gemini
+
+  requiredMcps: []
+
+  dependsOn: []
+
+  config:
+    minSources:
+      type: integer
+      default: 3
+      description: "Minimum number of independent sources to cross-reference"
+    preferPeerReviewed:
+      type: boolean
+      default: true
+      description: "Whether to prefer peer-reviewed sources"

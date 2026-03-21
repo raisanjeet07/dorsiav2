@@ -1,0 +1,188 @@
+# Dorsia — Unified Docker Compose
+#
+# Build & start all services:
+#   docker compose up --build
+#
+# Start a specific service:
+#   docker compose up --build gateway capability-service
+#
+# Tear down (keep volumes):
+#   docker compose down
+#
+# Tear down and wipe all data:
+#   docker compose down -v
+
+services:
+
+  # ─── Dev Base Image ──────────────────────────────────────────────────────────
+  # Builds the multi-tool base image (Node, Go, Python, Java, Claude Code,
+  # Gemini CLI, Cursor Agent). Referenced by the gateway's Dockerfile.
+  # This service exits immediately after the image is built; it is not a
+  # running container.
+  dev-base:
+    build:
+      context: ./agent-cli-dev-base-docker
+    image: agent-cli-dev-base:test
+    command: ["echo", "base image ready"]
+    profiles: ["build-only"]
+
+  # ─── CLI Agent Gateway ───────────────────────────────────────────────────────
+  gateway:
+    build:
+      context: ./cli-agents-go-wrapper-service
+    image: cli-agent-gateway:latest
+    ports:
+      - "8080:8080"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      GEMINI_API_KEY: ${GOOGLE_API_KEY}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      # Empty = multi-turn via Claude session_id + --resume. Set to 1 only for one-shot CI.
+      CLAUDE_CODE_DISABLE_RESUME: ${CLAUDE_CODE_DISABLE_RESUME:-}
+      GATEWAY_HOST: "0.0.0.0"
+      GATEWAY_PORT: "8080"
+      # Append JSON logs under ./logs/gateway (mounted below); still echoed to container stdout.
+      GATEWAY_LOG_FILE: "/var/log/gateway/gateway.log"
+      # Optional: use SHA-256 for deterministic adapter session UUIDs (default is SHA-1 / UUID v5).
+      GATEWAY_ADAPTER_SESSION_SHA256: ${GATEWAY_ADAPTER_SESSION_SHA256:-}
+      # Provision per-session agent cwd via workspace-file-service (same volume mount below).
+      GATEWAY_WORKSPACE_FILE_SERVICE_URL: ${GATEWAY_WORKSPACE_FILE_SERVICE_URL:-http://workspace-file-service:8090}
+      AGENT_WORK_DIR: "/workspace"
+    volumes:
+      - gateway-workspace:/workspace
+      - ./dorsia-workspace:/data/workspaces
+      - ./logs/gateway:/var/log/gateway
+    depends_on:
+      workspace-file-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── Session workspace files (per session_id directories + HTTP browse) ──────
+  workspace-file-service:
+    build:
+      context: ./workspace-file-service
+    image: workspace-file-service:latest
+    ports:
+      - "8090:8090"
+    environment:
+      WORKSPACE_FILE_HOST: "0.0.0.0"
+      WORKSPACE_FILE_PORT: "8090"
+      WORKSPACE_FILE_ROOT: "/data/workspaces"
+    volumes:
+      - ./dorsia-workspace:/data/workspaces
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── Capability & Persona Service ────────────────────────────────────────────
+  capability-service:
+    build:
+      context: ./ai-capability-skills-agent-persona
+    image: capability-service:latest
+    ports:
+      - "8100:8100"
+    environment:
+      CAPS_HOST: "0.0.0.0"
+      CAPS_PORT: "8100"
+      CAPS_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CAPS_DEBUG: ${DEBUG:-false}
+      CAPS_GATEWAY_HTTP_URL: "http://gateway:8080"
+      CAPS_GATEWAY_SYNC_ON_STARTUP: "true"
+      CAPS_HOT_RELOAD_ENABLED: "true"
+      CAPS_HOT_RELOAD_DEBOUNCE_SECONDS: "1.0"
+      CAPS_PERSIST_API_EXTENSIONS: "true"
+    volumes:
+      # Persist user-created extensions across container restarts
+      - capability-extensions:/app/config/extensions
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8100/api/v1/health'); assert r.status_code == 200"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  # ─── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-research_workflows}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-research_workflows}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── Research Workflow Service ───────────────────────────────────────────────
+  research-workflow:
+    build:
+      context: ./research-work-flow-ai
+    image: research-workflow:latest
+    ports:
+      - "8000:8000"
+    environment:
+      RESEARCH_HOST: "0.0.0.0"
+      RESEARCH_PORT: "8000"
+      RESEARCH_LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      RESEARCH_DEBUG: ${DEBUG:-false}
+      RESEARCH_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-research_workflows}"
+      RESEARCH_GATEWAY_WS_URL: "ws://gateway:8080/ws"
+      RESEARCH_GATEWAY_HTTP_URL: "http://gateway:8080"
+      RESEARCH_CAPABILITY_SERVICE_URL: "http://capability-service:8100"
+      RESEARCH_WORKSPACE_BASE_DIR: "/workspace/research"
+      RESEARCH_GATEWAY_RECONNECT_MAX_ATTEMPTS: "10"
+      RESEARCH_GATEWAY_RECONNECT_BASE_DELAY: "2.0"
+      RESEARCH_RESEARCHER_AGENT: ${RESEARCH_RESEARCHER_AGENT:-claude-code}
+      RESEARCH_REVIEWER_AGENT: ${RESEARCH_REVIEWER_AGENT:-claude-code}
+      RESEARCH_AGENT_PROMPT_TIMEOUT_SECONDS: "300"
+      RESEARCH_GATEWAY_AGENT_WORK_DIR: "/workspace"
+      RESEARCH_USER_REVIEW_TIMEOUT_HOURS: "24"
+    volumes:
+      - research-workspace:/workspace/research
+    depends_on:
+      postgres:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      capability-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8000/api/v1/health'); assert r.status_code == 200"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+# ─── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+    driver: local
+  gateway-workspace:
+    driver: local
+  capability-extensions:
+    driver: local
+  research-workspace:
+    driver: local

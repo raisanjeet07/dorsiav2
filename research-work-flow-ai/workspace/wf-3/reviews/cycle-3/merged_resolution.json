@@ -1,0 +1,48 @@
+{
+  "cycle": 3,
+  "resolutions": [
+    {
+      "comment_id": "4",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Reframed the CI/CD recommendation as explicit practitioner guidance rather than an evidence-backed finding, and added a sentence on recommended test pyramid composition to make it actionable."
+    },
+    {
+      "comment_id": "6",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Revised the George & Williams (2003) evidence table entry to clarify that '18% more passing test cases' refers to external black-box acceptance test pass rates on delivered software, not an internal test count metric. Also noted the study found no significant productivity loss to present a complete picture."
+    },
+    {
+      "comment_id": "2",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced the inline footer citation with a dedicated References section using APA 7th edition format including DOIs and full bibliographic details. The existing sources were expanded with complete metadata; two additional post-2010 sources were added per comment 5."
+    },
+    {
+      "comment_id": "7",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added two scoping sentences to the Introduction clarifying that the report covers general-purpose software contexts (enterprise, web, and desktop applications) and explicitly notes exclusions for safety-critical or embedded domains where TDD practices and evidence differ."
+    },
+    {
+      "comment_id": "5",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added two post-2010 entries to the evidence table \u2014 Rafique & Mi\u0161i\u0107 (2013), a 27-study meta-analysis, and Fucci et al. (2016), a multi-site blind replication that yielded null results \u2014 to broaden the evidence base and present a balanced view including mixed findings. Updated the analysis paragraph to acknowledge heterogeneity."
+    },
+    {
+      "comment_id": "3",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced the vague 'consistent quality improvement' characterization of Madeyski (2010) in the evidence table with a more specific description of the meta-analysis scope and key finding. Note: exact effect size figures from the monograph were not available for inline citation; the entry reflects the study's reported directional conclusions and scope."
+    },
+    {
+      "comment_id": "1",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Updated the Executive Summary to replace '40\u201380%' with '40\u201390%' to match the Nagappan et al. (2008) finding cited consistently in Section 3 and the evidence table."
+    }
+  ],
+  "merged_at": "2026-03-21T10:32:19.827974+00:00"
+}

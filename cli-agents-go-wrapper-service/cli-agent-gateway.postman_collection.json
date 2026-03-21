@@ -1,0 +1,841 @@
+{
+  "info": {
+    "name": "CLI Agent Gateway",
+    "description": "Complete API collection for the CLI Agent Gateway — a WebSocket + HTTP service that wraps Claude Code, Cursor, and Gemini CLI agents behind a unified protocol.\n\nBase URL: http://localhost:8080\nWebSocket: ws://localhost:8080/ws",
+    "_postman_id": "cli-agent-gateway-v2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",   "value": "http://localhost:8080", "type": "string" },
+    { "key": "wsUrl",     "value": "ws://localhost:8080/ws", "type": "string" },
+    { "key": "sessionId", "value": "session-abc-123",        "type": "string" },
+    { "key": "skillName", "value": "typescript-expert",      "type": "string" },
+    { "key": "mcpName",   "value": "filesystem",             "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health & Discovery",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "Liveness probe."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"status\":\"ok\",\"time\":\"2026-03-21T00:00:00Z\"}"
+            }
+          ]
+        },
+        {
+          "name": "List Registered Adapters",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/adapters", "host": ["{{baseUrl}}"], "path": ["adapters"] },
+            "description": "Returns all registered agent adapters with their full capability sets and supported model lists."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"name\": \"claude-code\",\n    \"capabilities\": {\n      \"agentType\": \"claude-code\",\n      \"supportsTools\": true,\n      \"supportsFiles\": true,\n      \"supportsImages\": true,\n      \"supportsDiff\": true,\n      \"supportsHistory\": true,\n      \"supportedModels\": [\"claude-opus-4-6\",\"claude-sonnet-4-6\",\"claude-haiku-4-5-20251001\",\"opus\",\"sonnet\",\"haiku\"],\n      \"extra\": { \"supportsCancel\": true, \"supportsToolApproval\": true }\n    }\n  },\n  {\n    \"name\": \"cursor\",\n    \"capabilities\": {\n      \"agentType\": \"cursor\",\n      \"supportedModels\": [\"cursor-default\",\"gpt-4o\",\"gpt-4.1\",\"claude-sonnet-4-6\",\"claude-opus-4-6\",\"gemini-2.5-pro\"],\n      \"extra\": { \"supportsComposer\": true }\n    }\n  },\n  {\n    \"name\": \"gemini\",\n    \"capabilities\": {\n      \"agentType\": \"gemini\",\n      \"supportsImages\": true,\n      \"supportedModels\": [\"gemini-2.5-pro\",\"gemini-2.5-flash\",\"gemini-2.0-flash\"],\n      \"extra\": { \"supportsMultimodal\": true, \"supportsSearch\": true }\n    }\n  }\n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "description": "Per-agent login state management. The gateway checks login before creating a session and caches the result in memory for the server's lifetime.",
+      "item": [
+        {
+          "name": "Get Auth Status — claude-code",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/auth", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","auth"] },
+            "description": "Returns cached (or freshly checked) authentication status for Claude Code.\n\ncacheHit=false → ran `claude auth status` live.\ncacheHit=true  → returned from in-memory cache."
+          },
+          "response": [
+            {
+              "name": "200 — Logged In (cache miss)",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"loggedIn\": true,\n  \"detail\": \"{\\\"loggedIn\\\":true,\\\"email\\\":\\\"user@example.com\\\",\\\"orgName\\\":\\\"My Org\\\",\\\"subscriptionType\\\":\\\"pro\\\"}\",\n  \"checkedAt\": \"2026-03-21T00:10:00Z\",\n  \"cacheHit\": false,\n  \"authSupported\": true\n}"
+            },
+            {
+              "name": "200 — Logged In (cache hit)",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"loggedIn\": true,\n  \"detail\": \"{\\\"email\\\":\\\"user@example.com\\\"}\",\n  \"checkedAt\": \"2026-03-21T00:10:00Z\",\n  \"cacheHit\": true,\n  \"authSupported\": true\n}"
+            },
+            {
+              "name": "200 — Not Logged In",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"loggedIn\": false,\n  \"detail\": \"Not authenticated\",\n  \"cacheHit\": false,\n  \"authSupported\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Auth Status — gemini",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/gemini/auth", "host": ["{{baseUrl}}"], "path": ["agents","gemini","auth"] },
+            "description": "Checks Gemini CLI authentication via `gemini auth status`."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"gemini\",\n  \"loggedIn\": true,\n  \"detail\": \"Logged in as user@gmail.com\",\n  \"cacheHit\": false,\n  \"authSupported\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Auth Status — cursor (no auth)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/cursor/auth", "host": ["{{baseUrl}}"], "path": ["agents","cursor","auth"] },
+            "description": "Cursor has no CLI auth command. Always returns authSupported=false, loggedIn=true."
+          },
+          "response": [
+            {
+              "name": "200 OK — Auth Not Required",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"cursor\",\n  \"loggedIn\": true,\n  \"cacheHit\": false,\n  \"authSupported\": false\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login — claude-code",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/auth/login", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","auth","login"] },
+            "description": "Starts the Claude Code OAuth login flow. Returns a browser URL immediately. The login process runs in the background — the cache is updated to loggedIn=true automatically when the user completes the OAuth flow."
+          },
+          "response": [
+            {
+              "name": "200 — URL Returned",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"authSupported\": true,\n  \"url\": \"https://claude.ai/oauth/authorize?code=true&client_id=...\",\n  \"message\": \"visit the URL in your browser to complete login\"\n}"
+            },
+            {
+              "name": "200 — Already Logged In",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"authSupported\": true,\n  \"loggedIn\": true,\n  \"message\": \"already logged in\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login — gemini",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/agents/gemini/auth/login", "host": ["{{baseUrl}}"], "path": ["agents","gemini","auth","login"] },
+            "description": "Starts the Gemini CLI OAuth login flow. Returns a browser URL immediately."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"gemini\",\n  \"authSupported\": true,\n  \"url\": \"https://accounts.google.com/o/oauth2/auth?...\",\n  \"message\": \"visit the URL in your browser to complete login\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login — cursor (no-op)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/agents/cursor/auth/login", "host": ["{{baseUrl}}"], "path": ["agents","cursor","auth","login"] },
+            "description": "Cursor has no CLI auth flow. Returns authSupported=false."
+          },
+          "response": [
+            {
+              "name": "200 OK — Auth Not Required",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"cursor\",\n  \"authSupported\": false,\n  \"message\": \"this agent does not require login\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Invalidate Auth Cache — claude-code",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/auth", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","auth"] },
+            "description": "Clears the cached login state. The next GET /agents/claude-code/auth or session.create will run a fresh live check."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"invalidated\":\"claude-code\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Models",
+      "description": "Per-agent model listings. Use these IDs in the `model` field of session.create.",
+      "item": [
+        {
+          "name": "List Models — claude-code",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/models", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","models"] },
+            "description": "Returns supported model IDs for Claude Code. Short aliases (opus, sonnet, haiku) are accepted by the --model flag."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"models\": [\n    \"claude-opus-4-6\",\n    \"claude-sonnet-4-6\",\n    \"claude-haiku-4-5-20251001\",\n    \"opus\",\n    \"sonnet\",\n    \"haiku\"\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Models — gemini",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/gemini/models", "host": ["{{baseUrl}}"], "path": ["agents","gemini","models"] },
+            "description": "Returns supported model IDs for Gemini CLI."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"gemini\",\n  \"models\": [\n    \"gemini-2.5-pro\",\n    \"gemini-2.5-flash\",\n    \"gemini-2.0-flash\"\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Models — cursor",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/cursor/models", "host": ["{{baseUrl}}"], "path": ["agents","cursor","models"] },
+            "description": "Returns supported model IDs for the Cursor CLI agent."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"cursor\",\n  \"models\": [\n    \"cursor-default\",\n    \"gpt-4o\",\n    \"gpt-4.1\",\n    \"claude-sonnet-4-6\",\n    \"claude-opus-4-6\",\n    \"gemini-2.5-pro\"\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Models — unknown agent (404)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/badagent/models", "host": ["{{baseUrl}}"], "path": ["agents","badagent","models"] },
+            "description": "Example 404 for an unregistered agent."
+          },
+          "response": [
+            {
+              "name": "404 Not Found",
+              "status": "Not Found", "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"error\":\"unknown agent: badagent\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Agent Modes",
+      "item": [
+        {
+          "name": "Get Modes — claude-code",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/modes", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","modes"] },
+            "description": "Returns operating modes for Claude Code. Use the mode `name` in the session.create payload.config."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"modes\": [\n    { \"name\": \"default\",           \"description\": \"Standard permission prompting\", \"default\": true },\n    { \"name\": \"acceptEdits\",       \"description\": \"Auto-accept file edits without prompting\" },\n    { \"name\": \"bypassPermissions\", \"description\": \"Skip all permission checks (--dangerously-skip-permissions)\" },\n    { \"name\": \"dontAsk\",           \"description\": \"Never ask for tool confirmation\" },\n    { \"name\": \"plan\",              \"description\": \"Planning mode only — reads but does not execute\" },\n    { \"name\": \"auto\",              \"description\": \"Fully autonomous mode with minimal interruption\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Modes — cursor",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/cursor/modes", "host": ["{{baseUrl}}"], "path": ["agents","cursor","modes"] },
+            "description": "Returns operating modes for the Cursor agent."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"cursor\",\n  \"modes\": [\n    { \"name\": \"agent\",    \"description\": \"Agent mode with full tool use\", \"default\": true },\n    { \"name\": \"composer\", \"description\": \"Composer mode focused on file generation\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Modes — gemini",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/gemini/modes", "host": ["{{baseUrl}}"], "path": ["agents","gemini","modes"] },
+            "description": "Returns operating modes for the Gemini CLI agent."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"gemini\",\n  \"modes\": [\n    { \"name\": \"default\", \"description\": \"Standard Gemini CLI mode\", \"default\": true },\n    { \"name\": \"sandbox\", \"description\": \"Sandboxed code execution mode (--sandbox flag)\" }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Skills Registry",
+      "item": [
+        {
+          "name": "List All Skills",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/skills", "host": ["{{baseUrl}}"], "path": ["skills"] },
+            "description": "Returns all registered skills across all scopes."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"skills\": [\n    {\n      \"name\": \"typescript-expert\",\n      \"scope\": \"global\",\n      \"description\": \"Expert TypeScript guidelines\",\n      \"prompt\": \"You are an expert TypeScript developer. Always use strict types, avoid any.\"\n    },\n    {\n      \"name\": \"security-review\",\n      \"scope\": \"claude-code\",\n      \"description\": \"OWASP security checklist\",\n      \"prompt\": \"Always check for OWASP Top 10 vulnerabilities.\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Register Global Skill",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"typescript-expert\",\n  \"scope\": \"global\",\n  \"description\": \"Expert TypeScript and type safety guidelines\",\n  \"prompt\": \"You are an expert TypeScript developer. Always use strict types, avoid `any`, prefer interfaces over types for objects, and use proper generics.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/skills", "host": ["{{baseUrl}}"], "path": ["skills"] },
+            "description": "Registers a global skill visible to all agents. Use scope=global or a specific agent name."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created", "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"name\": \"typescript-expert\",\n  \"scope\": \"global\",\n  \"description\": \"Expert TypeScript and type safety guidelines\",\n  \"prompt\": \"You are an expert TypeScript developer...\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Register Agent-Scoped Skill",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"security-review\",\n  \"scope\": \"claude-code\",\n  \"description\": \"OWASP security review checklist\",\n  \"prompt\": \"Always check for OWASP Top 10 vulnerabilities: XSS, SQL injection, CSRF, insecure deserialization.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/skills", "host": ["{{baseUrl}}"], "path": ["skills"] },
+            "description": "Registers a skill visible only to claude-code sessions."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created", "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"name\": \"security-review\",\n  \"scope\": \"claude-code\",\n  \"description\": \"OWASP security review checklist\",\n  \"prompt\": \"Always check for OWASP Top 10 vulnerabilities...\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete Skill",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/skills/{{skillName}}", "host": ["{{baseUrl}}"], "path": ["skills","{{skillName}}"] },
+            "description": "Removes a skill from the global registry. Sessions that already have it attached are unaffected."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"deleted\":\"typescript-expert\"}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found", "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"error\":\"skill not found: typescript-expert\"}"
+            }
+          ]
+        },
+        {
+          "name": "List Skills for Agent — claude-code",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/skills", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","skills"] },
+            "description": "Returns skills visible to claude-code: global + claude-code-scoped."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"skills\": [\n    { \"name\": \"typescript-expert\", \"scope\": \"global\",      \"prompt\": \"...\" },\n    { \"name\": \"security-review\",   \"scope\": \"claude-code\", \"prompt\": \"...\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Skills for Agent — gemini",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/gemini/skills", "host": ["{{baseUrl}}"], "path": ["agents","gemini","skills"] },
+            "description": "Returns skills visible to gemini (global only — security-review is claude-code scoped)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"gemini\",\n  \"skills\": [\n    { \"name\": \"typescript-expert\", \"scope\": \"global\", \"prompt\": \"...\" }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MCP Registry",
+      "item": [
+        {
+          "name": "List All MCPs",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/mcps", "host": ["{{baseUrl}}"], "path": ["mcps"] },
+            "description": "Returns all registered MCP server configurations."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"mcps\": [\n    {\n      \"name\": \"filesystem\",\n      \"scope\": \"global\",\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-filesystem\", \"/tmp\"]\n    },\n    {\n      \"name\": \"github\",\n      \"scope\": \"claude-code\",\n      \"type\": \"stdio\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@modelcontextprotocol/server-github\"],\n      \"env\": {\"GITHUB_PERSONAL_ACCESS_TOKEN\": \"ghp_xxxx\"}\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Register MCP — stdio (global)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"filesystem\",\n  \"scope\": \"global\",\n  \"type\": \"stdio\",\n  \"command\": \"npx\",\n  \"args\": [\"-y\", \"@modelcontextprotocol/server-filesystem\", \"/tmp\"],\n  \"env\": {}\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/mcps", "host": ["{{baseUrl}}"], "path": ["mcps"] },
+            "description": "Registers a global stdio MCP server available to all agents."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created", "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"name\": \"filesystem\",\n  \"scope\": \"global\",\n  \"type\": \"stdio\",\n  \"command\": \"npx\",\n  \"args\": [\"-y\", \"@modelcontextprotocol/server-filesystem\", \"/tmp\"],\n  \"env\": {}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Register MCP — stdio (agent-scoped)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"github\",\n  \"scope\": \"claude-code\",\n  \"type\": \"stdio\",\n  \"command\": \"npx\",\n  \"args\": [\"-y\", \"@modelcontextprotocol/server-github\"],\n  \"env\": {\n    \"GITHUB_PERSONAL_ACCESS_TOKEN\": \"ghp_xxxx\"\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/mcps", "host": ["{{baseUrl}}"], "path": ["mcps"] },
+            "description": "Registers an MCP server scoped to claude-code sessions only."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created", "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"name\": \"github\",\n  \"scope\": \"claude-code\",\n  \"type\": \"stdio\",\n  \"command\": \"npx\",\n  \"args\": [\"-y\", \"@modelcontextprotocol/server-github\"],\n  \"env\": {\"GITHUB_PERSONAL_ACCESS_TOKEN\": \"ghp_xxxx\"}\n}"
+            }
+          ]
+        },
+        {
+          "name": "Register MCP — SSE (remote)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"remote-tools\",\n  \"scope\": \"global\",\n  \"type\": \"sse\",\n  \"url\": \"https://mcp.example.com/sse\",\n  \"env\": {}\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/mcps", "host": ["{{baseUrl}}"], "path": ["mcps"] },
+            "description": "Registers a remote SSE-based MCP server."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created", "code": 201,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"name\": \"remote-tools\",\n  \"scope\": \"global\",\n  \"type\": \"sse\",\n  \"url\": \"https://mcp.example.com/sse\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Delete MCP",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/mcps/{{mcpName}}", "host": ["{{baseUrl}}"], "path": ["mcps","{{mcpName}}"] },
+            "description": "Removes an MCP server from the registry. Sessions that already have it attached are unaffected."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"deleted\":\"filesystem\"}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found", "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"error\":\"mcp not found: filesystem\"}"
+            }
+          ]
+        },
+        {
+          "name": "List MCPs for Agent — claude-code",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/mcps", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","mcps"] },
+            "description": "Returns MCP servers visible to claude-code: global + claude-code-scoped."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"claude-code\",\n  \"mcps\": [\n    { \"name\": \"filesystem\", \"scope\": \"global\",      \"type\": \"stdio\", \"command\": \"npx\", \"args\": [...] },\n    { \"name\": \"github\",     \"scope\": \"claude-code\", \"type\": \"stdio\", \"command\": \"npx\", \"args\": [...] }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "List MCPs for Agent — gemini",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/gemini/mcps", "host": ["{{baseUrl}}"], "path": ["agents","gemini","mcps"] },
+            "description": "Returns MCP servers visible to gemini (global only)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"agentName\": \"gemini\",\n  \"mcps\": [\n    { \"name\": \"filesystem\", \"scope\": \"global\", \"type\": \"stdio\", \"command\": \"npx\", \"args\": [...] }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Session Skills (Runtime Attachment)",
+      "item": [
+        {
+          "name": "List Session Skills",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/skills", "host": ["{{baseUrl}}"], "path": ["sessions","{{sessionId}}","skills"] },
+            "description": "Lists all skills available to the session's agent, annotated with their current attachment status."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": \"session-abc-123\",\n  \"skills\": [\n    { \"name\": \"typescript-expert\", \"scope\": \"global\",      \"prompt\": \"...\", \"attached\": true },\n    { \"name\": \"security-review\",   \"scope\": \"claude-code\", \"prompt\": \"...\", \"attached\": false }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Attach Skill to Session",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/skills/{{skillName}}", "host": ["{{baseUrl}}"], "path": ["sessions","{{sessionId}}","skills","{{skillName}}"] },
+            "description": "Attaches a registered skill to a live session. Takes effect on the next prompt. Idempotent."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"attached\":\"typescript-expert\",\"sessionId\":\"session-abc-123\"}"
+            },
+            {
+              "name": "404 Skill Not Found",
+              "status": "Not Found", "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"error\":\"skill not registered: typescript-expert\"}"
+            },
+            {
+              "name": "404 Session Not Found",
+              "status": "Not Found", "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"error\":\"session not found: session-abc-123\"}"
+            }
+          ]
+        },
+        {
+          "name": "Detach Skill from Session",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/skills/{{skillName}}", "host": ["{{baseUrl}}"], "path": ["sessions","{{sessionId}}","skills","{{skillName}}"] },
+            "description": "Detaches a skill from a live session. Takes effect on the next prompt."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"detached\":\"typescript-expert\",\"sessionId\":\"session-abc-123\"}"
+            },
+            {
+              "name": "404 Skill Not Attached",
+              "status": "Not Found", "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"error\":\"skill not attached: typescript-expert\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Session MCPs (Runtime Attachment)",
+      "item": [
+        {
+          "name": "List Session MCPs",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/mcps", "host": ["{{baseUrl}}"], "path": ["sessions","{{sessionId}}","mcps"] },
+            "description": "Lists all MCP servers available to the session's agent, annotated with their current attachment status."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": \"session-abc-123\",\n  \"mcps\": [\n    { \"name\": \"filesystem\", \"scope\": \"global\",      \"type\": \"stdio\", \"attached\": true },\n    { \"name\": \"github\",     \"scope\": \"claude-code\", \"type\": \"stdio\", \"attached\": false }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Attach MCP to Session",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/mcps/{{mcpName}}", "host": ["{{baseUrl}}"], "path": ["sessions","{{sessionId}}","mcps","{{mcpName}}"] },
+            "description": "Attaches a registered MCP server to a live session. Takes effect on the next prompt. Idempotent."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"attached\":\"filesystem\",\"sessionId\":\"session-abc-123\"}"
+            },
+            {
+              "name": "404 MCP Not Found",
+              "status": "Not Found", "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"error\":\"mcp not registered: filesystem\"}"
+            }
+          ]
+        },
+        {
+          "name": "Detach MCP from Session",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/sessions/{{sessionId}}/mcps/{{mcpName}}", "host": ["{{baseUrl}}"], "path": ["sessions","{{sessionId}}","mcps","{{mcpName}}"] },
+            "description": "Detaches an MCP server from a live session. Takes effect on the next prompt."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK", "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"detached\":\"filesystem\",\"sessionId\":\"session-abc-123\"}"
+            },
+            {
+              "name": "404 MCP Not Attached",
+              "status": "Not Found", "code": 404,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\"error\":\"mcp not attached: filesystem\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WebSocket — Message Examples",
+      "description": "Connect to {{wsUrl}} using Postman's WebSocket client (New → WebSocket Request), then paste the message bodies below.\n\nAll messages follow the Envelope schema:\n{\n  \"id\": \"<uuid>\",\n  \"type\": \"<message-type>\",\n  \"sessionId\": \"<session-id>\",\n  \"flow\": \"<agent-name>\",\n  \"payload\": { ... },\n  \"timestamp\": \"<ISO-8601>\"\n}",
+      "item": [
+        {
+          "name": "[WS] session.create — claude-code",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Create a new claude-code session.\n\nNote: if the agent is not logged in, you will receive AUTH_REQUIRED with a login URL. Call POST /agents/claude-code/auth/login first.\n\nMessage body:\n```json\n{\n  \"id\": \"msg-001\",\n  \"type\": \"session.create\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": {\n    \"connectionMode\": \"spawn\",\n    \"workingDir\": \"/tmp/my-project\",\n    \"model\": \"claude-sonnet-4-6\"\n  },\n  \"timestamp\": \"2026-03-21T00:00:00Z\"\n}\n```\n\nSuccess response:\n```json\n{\n  \"type\": \"session.created\",\n  \"replyTo\": \"msg-001\",\n  \"payload\": {\n    \"sessionId\": \"session-abc-123\",\n    \"flow\": \"claude-code\",\n    \"status\": \"created\",\n    \"capabilities\": { \"streaming\": true, \"toolUse\": true, ... }\n  }\n}\n```\n\nAuth failure response:\n```json\n{\n  \"type\": \"error\",\n  \"error\": {\n    \"code\": \"AUTH_REQUIRED\",\n    \"message\": \"AUTH_REQUIRED: agent \\\"claude-code\\\" is not logged in; visit https://claude.ai/oauth/authorize?...\"\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] session.create — cursor",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Create a cursor session.\n\nMessage body:\n```json\n{\n  \"id\": \"msg-001\",\n  \"type\": \"session.create\",\n  \"sessionId\": \"cursor-session-456\",\n  \"flow\": \"cursor\",\n  \"payload\": {\n    \"connectionMode\": \"spawn\",\n    \"workingDir\": \"/tmp/cursor-project\"\n  },\n  \"timestamp\": \"2026-03-21T00:00:00Z\"\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] session.create — gemini",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Create a gemini session.\n\nMessage body:\n```json\n{\n  \"id\": \"msg-001\",\n  \"type\": \"session.create\",\n  \"sessionId\": \"gemini-session-789\",\n  \"flow\": \"gemini\",\n  \"payload\": {\n    \"connectionMode\": \"spawn\",\n    \"workingDir\": \"/tmp/gemini-project\",\n    \"model\": \"gemini-2.5-pro\"\n  },\n  \"timestamp\": \"2026-03-21T00:00:00Z\"\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] session.list",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "List all active sessions (server-wide).\n\nMessage body:\n```json\n{\n  \"id\": \"msg-002\",\n  \"type\": \"session.list\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": {},\n  \"timestamp\": \"2026-03-21T00:00:01Z\"\n}\n```\n\nResponse:\n```json\n{\n  \"type\": \"session.list.result\",\n  \"payload\": {\n    \"sessions\": [\n      { \"sessionId\": \"session-abc-123\", \"flow\": \"claude-code\", \"status\": \"running\", \"createdAt\": \"...\" }\n    ]\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] prompt.send",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Send a prompt to the agent. Receives a stream of events (stream.start → stream.delta × N → stream.end).\n\nMessage body:\n```json\n{\n  \"id\": \"msg-003\",\n  \"type\": \"prompt.send\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": {\n    \"content\": \"Write a Go function that checks if a number is prime\"\n  },\n  \"timestamp\": \"2026-03-21T00:00:02Z\"\n}\n```\n\nEvent stream:\n```json\n{\"type\":\"stream.start\"}\n{\"type\":\"agent.status\",\"payload\":{\"status\":\"thinking\"}}\n{\"type\":\"stream.delta\",\"payload\":{\"contentType\":\"text\",\"content\":\"Here's a Go function...\"}}\n{\"type\":\"stream.end\",\"payload\":{\"finishReason\":\"complete\",\"usage\":{\"totalCost\":0.002}}}\n{\"type\":\"agent.status\",\"payload\":{\"status\":\"idle\"}}\n```"
+          }
+        },
+        {
+          "name": "[WS] prompt.cancel",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Cancel an in-flight prompt.\n\nMessage body:\n```json\n{\n  \"id\": \"msg-004\",\n  \"type\": \"prompt.cancel\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": {},\n  \"timestamp\": \"2026-03-21T00:00:03Z\"\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] tool.approve",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Approve a pending tool use (received as tool.use.start server-push).\n\nMessage body:\n```json\n{\n  \"id\": \"msg-005\",\n  \"type\": \"tool.approve\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": { \"toolId\": \"toolu_01Abc123\" },\n  \"timestamp\": \"2026-03-21T00:00:04Z\"\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] tool.reject",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Reject a pending tool use.\n\nMessage body:\n```json\n{\n  \"id\": \"msg-006\",\n  \"type\": \"tool.reject\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": {\n    \"toolId\": \"toolu_01Abc123\",\n    \"reason\": \"Do not write to that path\"\n  },\n  \"timestamp\": \"2026-03-21T00:00:04Z\"\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] history.request",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Request conversation history (claude-code only).\n\nMessage body:\n```json\n{\n  \"id\": \"msg-007\",\n  \"type\": \"history.request\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": { \"limit\": 20 },\n  \"timestamp\": \"2026-03-21T00:00:05Z\"\n}\n```\n\nResponse:\n```json\n{\n  \"type\": \"history.result\",\n  \"replyTo\": \"msg-007\",\n  \"payload\": {\n    \"messages\": [\n      { \"role\": \"user\",      \"content\": \"Write a prime checker...\" },\n      { \"role\": \"assistant\", \"content\": \"Here's a Go function...\" }\n    ]\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] session.resume",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Resume an existing session after a WebSocket reconnect. Auto-restarts the agent if the process died.\n\nMessage body:\n```json\n{\n  \"id\": \"msg-008\",\n  \"type\": \"session.resume\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": {},\n  \"timestamp\": \"2026-03-21T00:00:06Z\"\n}\n```\n\nResponse:\n```json\n{\n  \"type\": \"session.resumed\",\n  \"replyTo\": \"msg-008\",\n  \"payload\": {\n    \"sessionId\": \"session-abc-123\",\n    \"flow\": \"claude-code\",\n    \"status\": \"existing\"\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "[WS] session.end",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{wsUrl}}", "host": ["{{wsUrl}}"] },
+            "description": "Permanently terminate and remove a session.\n\nMessage body:\n```json\n{\n  \"id\": \"msg-009\",\n  \"type\": \"session.end\",\n  \"sessionId\": \"session-abc-123\",\n  \"flow\": \"claude-code\",\n  \"payload\": {},\n  \"timestamp\": \"2026-03-21T00:00:10Z\"\n}\n```\n\nResponse:\n```json\n{\n  \"type\": \"session.ended\",\n  \"replyTo\": \"msg-009\",\n  \"sessionId\": \"session-abc-123\",\n  \"payload\": null\n}\n```"
+          }
+        }
+      ]
+    },
+    {
+      "name": "End-to-End Workflows",
+      "description": "Multi-step flows combining HTTP and WebSocket.",
+      "item": [
+        {
+          "name": "[Workflow Step 1] Check auth before creating session",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/auth", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","auth"] },
+            "description": "Step 1: Check if the agent is logged in.\n\nIf loggedIn=false → call POST /agents/claude-code/auth/login → user visits URL → retry.\nIf loggedIn=true  → proceed to create session via WebSocket."
+          }
+        },
+        {
+          "name": "[Workflow Step 2] Login if needed",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/auth/login", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","auth","login"] },
+            "description": "Step 2 (only if not logged in): Start the login flow. Copy the returned URL and open it in a browser. Wait for the OAuth flow to complete, then retry Step 1 to confirm loggedIn=true."
+          }
+        },
+        {
+          "name": "[Workflow Step 3] Get available models",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/agents/claude-code/models", "host": ["{{baseUrl}}"], "path": ["agents","claude-code","models"] },
+            "description": "Step 3: Fetch the model list to pick a model ID for the session."
+          }
+        },
+        {
+          "name": "[Workflow Step 4] Register a skill",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"go-expert\",\n  \"scope\": \"global\",\n  \"description\": \"Go best practices\",\n  \"prompt\": \"You are an expert Go developer. Write idiomatic Go: use interfaces, handle errors explicitly, prefer composition.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/skills", "host": ["{{baseUrl}}"], "path": ["skills"] },
+            "description": "Step 4: Register a skill globally.\n\nNext steps:\n- Create session via WebSocket: session.create with model from Step 3\n- Attach skill: POST /sessions/{id}/skills/go-expert\n- Send prompt: WebSocket prompt.send\n- The skill is injected automatically as --append-system-prompt"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+# Secrets — copy from .env.example
+.env
+.env.local
+.env.*.local
+
+# Generated service logs (keep directory + README in git)
+logs/**/*.log
+
+# Session workspaces (workspace-file-service); keep README only
+dorsia-workspace/**/*
+!dorsia-workspace/README.md
+
+# Local dev process logs / pids
+.local/
+
+# Python
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.egg-info/
+**/dist/
+**/.mypy_cache/
+
+# Go
+**/bin/
+!**/bin/.gitkeep
+
+# Node (if used in subprojects)
+**/node_modules/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code local overrides (may contain machine-specific paths)
+.claude/settings.local.json
+**/settings.local.json

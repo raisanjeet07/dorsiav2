@@ -1,0 +1,50 @@
+# Bind-mount a host directory into the container workspace (mandatory — verified at startup).
+#
+# ── Quick start (API keys → auto-login) ──
+#   ANTHROPIC_API_KEY=sk-ant-... GOOGLE_API_KEY=... docker compose run --rm agent-cli
+#
+# ── With host CLI auth (mount pre-existing host configs) ──
+#   ./scripts/collect-host-cli-auth.sh
+#   docker compose --profile host-auth run --rm agent-cli-host-auth
+#
+# ── Verify agents ──
+#   docker compose run --rm agent-cli verify-agents.sh --auth --verbose
+
+services:
+  # ─── Default: API-key auto-login ──────────────────────────────────
+  agent-cli:
+    build: .
+    image: agent-cli-dev-base:local
+    user: dev
+    working_dir: ${WORKSPACE_ROOT:-/workspace}
+    environment:
+      WORKSPACE_ROOT: ${WORKSPACE_ROOT:-/workspace}
+      AGENT_DATA_DIR: ${AGENT_DATA_DIR:-/workspace/.agent-data}
+      REQUIRE_WORKSPACE_MOUNT: ${REQUIRE_WORKSPACE_MOUNT:-1}
+      REQUIRE_AGENT_DATA_MOUNT: ${REQUIRE_AGENT_DATA_MOUNT:-0}
+      REQUIRE_API_KEYS: ${REQUIRE_API_KEYS:-}
+      KEYS_ENV_FILE: ${KEYS_ENV_FILE:-}
+      AUTO_LOGIN_AGENTS: ${AUTO_LOGIN_AGENTS:-1}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+    volumes:
+      - ${HOST_WORKSPACE:-.}:${WORKSPACE_ROOT:-/workspace}:rw
+    stdin_open: true
+    tty: true
+    command: bash
+
+  # ─── Alt: Mount host CLI auth configs (read-only) ────────────────
+  agent-cli-host-auth:
+    extends:
+      service: agent-cli
+    profiles: ["host-auth"]
+    environment:
+      AUTO_LOGIN_AGENTS: "0"
+      HOST_CLI_AUTH_DIR: /host-auth
+    volumes:
+      - ${HOST_WORKSPACE:-.}:${WORKSPACE_ROOT:-/workspace}:rw
+      - ${HOST_CLI_AUTH_BUNDLE:-./host-cli-auth-bundle}/claude/.claude:/home/dev/.claude:ro
+      - ${HOST_CLI_AUTH_BUNDLE:-./host-cli-auth-bundle}/gemini/.gemini:/home/dev/.gemini:ro
+      - ${HOST_CLI_AUTH_BUNDLE:-./host-cli-auth-bundle}/cursor/local__share__cursor-agent:/home/dev/.local/share/cursor-agent:ro

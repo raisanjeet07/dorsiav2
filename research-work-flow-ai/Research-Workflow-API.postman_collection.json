@@ -1,0 +1,642 @@
+{
+  "info": {
+    "name": "Research Workflow Service",
+    "description": "Multi-agent research workflow orchestrator — Dorsia v2.\n\nWorkflow lifecycle:\n1. POST /workflows — kicks off research (Gemini) → review (Claude) → resolve → consensus loop\n2. WS  /ws/workflows/{workflowId} — stream real-time events + user chat\n3. POST /approve or /request-changes — move to final report generation\n\nState machine: INITIATED → RESEARCHING → RESEARCH_COMPLETE → REVIEWING → REVIEW_COMPLETE → RESOLVING → RESOLUTION_COMPLETE → RE_REVIEWING → CONSENSUS_REACHED → USER_REVIEW → USER_APPROVED → GENERATING_FINAL → COMPLETED",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "wsBaseUrl",
+      "value": "ws://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "workflowId",
+      "value": "wf-0",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Root",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Service info — returns name, version, docs URL."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"service\": \"Research Workflow Service\",\n  \"version\": \"0.1.0\",\n  \"docs\": \"/docs\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "health"]
+            },
+            "description": "Returns service health: gateway connectivity + database status."
+          },
+          "response": [
+            {
+              "name": "200 Healthy",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"status\": \"healthy\",\n  \"gateway_connected\": true,\n  \"database_ready\": true,\n  \"version\": \"1.0.0\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Workflow CRUD",
+      "item": [
+        {
+          "name": "Create Workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('workflowId', json.workflow_id);",
+                  "    pm.test('workflow_id set', function () {",
+                  "        pm.expect(json.workflow_id).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"Impact of large language models on software engineering productivity\",\n  \"context\": \"Focus on empirical studies from 2024-2026, include both code generation and code review use-cases.\",\n  \"depth\": \"deep\",\n  \"max_review_cycles\": 3,\n  \"output_format\": \"markdown\",\n  \"agent_config\": {}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows"]
+            },
+            "description": "Start a new research workflow. The orchestrator begins the INITIATED → RESEARCHING pipeline immediately.\n\n**Fields:**\n- `topic` (required) — The research question or topic.\n- `context` — Optional background to guide the researcher agent.\n- `depth` — `shallow` | `standard` | `deep` (controls Gemini research thoroughness).\n- `max_review_cycles` — Caps review/resolve iterations (default 5).\n- `output_format` — `markdown` (default).\n- `agent_config` — Per-agent overrides (model, persona, etc.)."
+          },
+          "response": [
+            {
+              "name": "200 Created",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"initial_state\": \"INITIATED\",\n  \"workspace_path\": \"./workspace/wf-0\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Workflows",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows"],
+              "query": [
+                {"key": "state", "value": "", "description": "Filter by state (e.g. RESEARCHING, USER_REVIEW, COMPLETED)", "disabled": true},
+                {"key": "limit", "value": "50", "description": "Max results (1-1000, default 100)"},
+                {"key": "offset", "value": "0", "description": "Pagination offset (default 0)"}
+              ]
+            },
+            "description": "List all workflows with optional state filter and pagination."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflows\": [\n    {\n      \"workflow_id\": \"wf-0\",\n      \"topic\": \"Impact of LLMs on SE productivity\",\n      \"context\": \"\",\n      \"depth\": \"deep\",\n      \"current_state\": \"RESEARCHING\",\n      \"previous_state\": \"INITIATED\",\n      \"review_cycle\": 0,\n      \"forced_consensus\": false,\n      \"workspace_path\": \"./workspace/wf-0\",\n      \"created_at\": \"2026-03-21T10:00:00+00:00\",\n      \"updated_at\": \"2026-03-21T10:00:05+00:00\",\n      \"completed_at\": null\n    }\n  ],\n  \"total\": 1,\n  \"limit\": 50,\n  \"offset\": 0\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Workflows — Filter by State",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows?state=USER_REVIEW",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows"],
+              "query": [
+                {"key": "state", "value": "USER_REVIEW"}
+              ]
+            },
+            "description": "Filter workflows by a specific state (e.g. USER_REVIEW to find those awaiting user action)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Workflow",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}"]
+            },
+            "description": "Get detailed info for a single workflow."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"topic\": \"Impact of LLMs on SE productivity\",\n  \"context\": \"\",\n  \"depth\": \"deep\",\n  \"current_state\": \"REVIEWING\",\n  \"previous_state\": \"RESEARCH_COMPLETE\",\n  \"review_cycle\": 1,\n  \"forced_consensus\": false,\n  \"workspace_path\": \"./workspace/wf-0\",\n  \"created_at\": \"2026-03-21T10:00:00+00:00\",\n  \"updated_at\": \"2026-03-21T10:05:00+00:00\",\n  \"completed_at\": null\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"detail\": \"Workflow wf-999 not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Workflow State (detailed)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/state",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "state"]
+            },
+            "description": "Detailed state: includes full state transition history and list of report artifacts."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"current_state\": \"USER_REVIEW\",\n  \"previous_state\": \"CONSENSUS_REACHED\",\n  \"review_cycle\": 2,\n  \"forced_consensus\": false,\n  \"state_history\": [\n    {\"from_state\": \"INITIATED\", \"to_state\": \"RESEARCHING\", \"trigger\": \"START_RESEARCH\", \"created_at\": \"2026-03-21T10:00:00+00:00\"},\n    {\"from_state\": \"RESEARCHING\", \"to_state\": \"RESEARCH_COMPLETE\", \"trigger\": \"RESEARCH_DONE\", \"created_at\": \"2026-03-21T10:03:00+00:00\"}\n  ],\n  \"active_sessions\": [],\n  \"artifacts\": [\n    {\"version\": \"draft-v1\", \"file_path\": \"./workspace/wf-0/reports/draft-v1.md\", \"artifact_type\": \"report\", \"size_bytes\": 15200, \"created_at\": \"2026-03-21T10:03:00+00:00\"}\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Cancel Workflow",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "cancel"]
+            },
+            "description": "Cancel a running workflow. Stops all agent tasks and transitions to CANCELLED state."
+          },
+          "response": [
+            {
+              "name": "200 Cancelled",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"previous_state\": \"RESEARCHING\",\n  \"current_state\": \"CANCELLED\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Get Current Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/report",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "report"]
+            },
+            "description": "Get the latest draft report content (markdown). Available after RESEARCH_COMPLETE."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"version\": \"draft-v2\",\n  \"content\": \"# Research Report\\n\\n## Executive Summary\\n...\"\n}"
+            },
+            {
+              "name": "404 No Report Yet",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"detail\": \"No report generated yet\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Final Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/report/final",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "report", "final"]
+            },
+            "description": "Get the final report file path and download URL. Only available after COMPLETED state."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"file_path\": \"./workspace/wf-0/reports/final.md\",\n  \"download_url\": \"/downloads/workflows/wf-0/final-report\"\n}"
+            },
+            {
+              "name": "404 Not Ready",
+              "status": "Not Found",
+              "code": 404,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"detail\": \"Final report not available\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Reviews & Conversations",
+      "item": [
+        {
+          "name": "Get Review Rounds",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "reviews"]
+            },
+            "description": "Get all review cycles with structured comments. Each cycle includes the reviewer's consensus flag, quality score, summary, and per-section comments."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"reviews\": [\n    {\n      \"cycle\": 1,\n      \"reviewer_session\": \"sess-abc123\",\n      \"consensus\": false,\n      \"overall_quality\": 7,\n      \"summary\": \"Good coverage but missing empirical data in Section 3.\",\n      \"comments\": [\n        {\n          \"id\": \"c-001\",\n          \"severity\": \"major\",\n          \"section\": \"Section 3 — Methodology\",\n          \"comment\": \"No empirical studies cited.\",\n          \"recommendation\": \"Add at least 3 peer-reviewed studies.\",\n          \"resolved\": false\n        }\n      ],\n      \"created_at\": \"2026-03-21T10:05:00+00:00\"\n    }\n  ],\n  \"total_cycles\": 1\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "conversations"],
+              "query": [
+                {"key": "role", "value": "user_chat", "description": "Filter by agent role (researcher, reviewer, gemini_resolver, claude_resolver, user_chat, report_generator)", "disabled": true}
+              ]
+            },
+            "description": "Get the full conversation log for a workflow. Optionally filter by agent role."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"conversations\": [\n    {\n      \"session_id\": \"sess-abc123\",\n      \"role\": \"user_chat\",\n      \"direction\": \"outbound\",\n      \"content\": \"Can you add more detail about code review tools?\",\n      \"content_type\": \"text\",\n      \"created_at\": \"2026-03-21T10:20:00+00:00\"\n    },\n    {\n      \"session_id\": \"sess-abc123\",\n      \"role\": \"user_chat\",\n      \"direction\": \"inbound\",\n      \"content\": \"Sure, I'll expand the section on automated code review...\",\n      \"content_type\": \"text\",\n      \"created_at\": \"2026-03-21T10:20:05+00:00\"\n    }\n  ],\n  \"total\": 2\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Conversations — Filter by Role",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/conversations?role=reviewer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "conversations"],
+              "query": [
+                {"key": "role", "value": "reviewer"}
+              ]
+            },
+            "description": "Get only conversations from a specific agent role."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Actions",
+      "description": "Actions the user takes during USER_REVIEW state to move the workflow forward.",
+      "item": [
+        {
+          "name": "Approve Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Looks great, proceed to final generation.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "approve"]
+            },
+            "description": "User approves the report. Transitions from USER_REVIEW → USER_APPROVED → GENERATING_FINAL → COMPLETED.\n\nOnly valid when workflow is in USER_REVIEW state."
+          },
+          "response": [
+            {
+              "name": "200 Approved",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"previous_state\": \"USER_REVIEW\",\n  \"current_state\": \"USER_APPROVED\"\n}"
+            },
+            {
+              "name": "400 Invalid State",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"detail\": \"Workflow wf-0 is not in USER_REVIEW state\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Request Changes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"changes\": {\n    \"sections_to_expand\": [\"Section 3 — Methodology\"],\n    \"add_topics\": [\"AI pair programming tools comparison\"],\n    \"tone\": \"Make the executive summary more concise\",\n    \"general_feedback\": \"Good overall, but needs more recent 2026 data.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/request-changes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "request-changes"]
+            },
+            "description": "User requests changes. Sends the workflow back through the review/resolve cycle (up to max_user_change_requests).\n\nThe `changes` object is free-form — the resolver agents interpret it as instructions."
+          },
+          "response": [
+            {
+              "name": "200 Changes Accepted",
+              "status": "OK",
+              "code": 200,
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": "{\n  \"workflow_id\": \"wf-0\",\n  \"previous_state\": \"USER_REVIEW\",\n  \"current_state\": \"RESOLVING\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WebSocket — Real-time Events",
+      "description": "WebSocket connection for streaming workflow events and user chat.\n\n**Connect:** `ws://localhost:8000/ws/workflows/{workflowId}`\n\nUse Postman's WebSocket Request tab to test these.\n\n**Server → Client event types:**\n- `connection.state` — Initial state on connect\n- `workflow.state_changed` — State transition\n- `agent.stream_delta` — Streaming text chunk from an agent\n- `agent.status` — Agent lifecycle (started, completed, failed)\n- `review.comments` — Structured review output\n- `resolution.merged` — Merged resolver output\n- `workflow.completed` — Final completion\n- `workflow.error` — Error event\n- `user.chat_response` — Streaming chat response\n- `user.approval_accepted` — Approval confirmed\n- `user.changes_accepted` — Changes accepted\n- `error` — Error message\n\n**Client → Server message types:**\n- `user.message` — Send chat message during USER_REVIEW\n- `user.approve` — Approve the report\n- `user.request_changes` — Request changes\n- `user.cancel` — Cancel the workflow",
+      "item": [
+        {
+          "name": "WS Connect (reference)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Connection", "value": "Upgrade"},
+              {"key": "Upgrade", "value": "websocket"}
+            ],
+            "url": {
+              "raw": "{{wsBaseUrl}}/ws/workflows/{{workflowId}}",
+              "host": ["{{wsBaseUrl}}"],
+              "path": ["ws", "workflows", "{{workflowId}}"]
+            },
+            "description": "**This is a WebSocket endpoint — use Postman's WebSocket Request tab, not this HTTP request.**\n\nURL: `ws://localhost:8000/ws/workflows/{{workflowId}}`\n\nOn connect, the server sends the current workflow state as the first message."
+          },
+          "response": []
+        },
+        {
+          "name": "WS › Send Chat Message (copy as raw body)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "**Paste this JSON into the WebSocket message input:**\n\n```json\n{\n  \"type\": \"user.message\",\n  \"payload\": {\n    \"message\": \"Can you expand the section about AI pair programming tools?\"\n  }\n}\n```\n\nServer responds with streaming `user.chat_response` events."
+          },
+          "response": []
+        },
+        {
+          "name": "WS › Approve Report (copy as raw body)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "**Paste this JSON into the WebSocket message input:**\n\n```json\n{\n  \"type\": \"user.approve\",\n  \"payload\": {\n    \"comment\": \"Looks good, generate the final report.\"\n  }\n}\n```\n\nServer responds with `user.approval_accepted`, then streams `workflow.state_changed` events as the report is finalized."
+          },
+          "response": []
+        },
+        {
+          "name": "WS › Request Changes (copy as raw body)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "**Paste this JSON into the WebSocket message input:**\n\n```json\n{\n  \"type\": \"user.request_changes\",\n  \"payload\": {\n    \"changes\": {\n      \"sections_to_expand\": [\"Methodology\"],\n      \"general_feedback\": \"Add more quantitative data.\"\n    }\n  }\n}\n```\n\nServer responds with `user.changes_accepted`, then resumes the review cycle."
+          },
+          "response": []
+        },
+        {
+          "name": "WS › Cancel Workflow (copy as raw body)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "**Paste this JSON into the WebSocket message input:**\n\n```json\n{\n  \"type\": \"user.cancel\",\n  \"payload\": {}\n}\n```\n\nServer responds with `user.cancel_accepted`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "E2E Flow — Happy Path",
+      "description": "Run these requests in order to test the full workflow lifecycle.",
+      "item": [
+        {
+          "name": "1. Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. Create Research Workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('workflowId', json.workflow_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"State of AI code assistants in 2026: adoption, productivity metrics, and developer sentiment\",\n  \"context\": \"Target audience is engineering leadership. Include quantitative data where available.\",\n  \"depth\": \"deep\",\n  \"max_review_cycles\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3. Poll Workflow State",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/state",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "state"]
+            },
+            "description": "Poll this endpoint to track state progression. In production, use the WebSocket instead."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Get Current Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/report",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "report"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5. Get Reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "reviews"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "6. Approve Report",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Approved — generate final.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "approve"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7. Get Final Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/workflows/{{workflowId}}/report/final",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "workflows", "{{workflowId}}", "report", "final"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

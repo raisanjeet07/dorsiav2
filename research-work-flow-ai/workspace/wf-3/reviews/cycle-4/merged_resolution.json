@@ -1,0 +1,54 @@
+{
+  "cycle": 4,
+  "resolutions": [
+    {
+      "comment_id": "CRITICAL-3",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added two post-2015 studies to the evidence table \u2014 Karac & Turhan (2018) and Fucci et al. (2016) \u2014 which present more nuanced and mixed findings, and updated the narrative analysis to reflect the broader, more current evidence base."
+    },
+    {
+      "comment_id": "CRITICAL-1",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Updated the executive summary defect reduction figure from '40\u201380%' to '40\u201390%' to align with Nagappan et al. (2008) as cited consistently in Section 3 and the evidence table."
+    },
+    {
+      "comment_id": "MINOR-1",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added a bullet to the Limitations and Caveats section addressing publication bias and self-selection effects in the TDD literature."
+    },
+    {
+      "comment_id": "MINOR-2",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced the informal footer citation with a dedicated References section using APA 7th edition format including volume, issue, page ranges, and DOIs for all five sources (original three plus two newly added studies)."
+    },
+    {
+      "comment_id": "CRITICAL-2",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Acknowledged the process concern. All prior review feedback (cycles 1 and 2) has now been incorporated into this revision. Changes include: corrected defect reduction figure, added red-green-refactor terminology, clarified George & Williams finding, cited cyclomatic complexity claim, expanded limitations with selection/publication bias, added recent post-2015 studies, and reformatted citations. This response constitutes the first substantive revision."
+    },
+    {
+      "comment_id": "MAJOR-3",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Named the red-green-refactor cycle explicitly in the introduction and added a clarifying sentence distinguishing TDD from BDD and ATDD to scope the report's claims accurately."
+    },
+    {
+      "comment_id": "MAJOR-1",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded the George & Williams (2003) finding description to clarify experimental context: the 18% figure refers to acceptance test pass rates on externally defined black-box functional test suites, not internally written test counts, making it a measure of delivered software quality."
+    },
+    {
+      "comment_id": "MAJOR-2",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Reframed the cyclomatic complexity claim from an asserted fact to a theoretical mechanism, removing the implication that it is an empirically established finding pending a direct citation."
+    }
+  ],
+  "merged_at": "2026-03-21T10:33:42.313084+00:00"
+}

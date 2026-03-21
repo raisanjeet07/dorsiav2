@@ -1,0 +1,48 @@
+{
+  "resolutions": [
+    {
+      "comment_id": "CRITICAL-1",
+      "action": "Updated Executive Summary defect reduction figure from '40\u201380%' to '40\u201390%' to match Nagappan et al. (2008) as cited in Section 3 and the evidence table.",
+      "revised_section": "## 1. Executive Summary\n\nTest-driven development (TDD) improves code quality, reduces defect rates, and supports maintainability by requiring tests to be written before production code. Evidence consistently shows TDD reduces bugs by 40\u201390% at a modest productivity cost.",
+      "status": "resolved"
+    },
+    {
+      "comment_id": "MAJOR-2",
+      "action": "Expanded the evidence table with two post-2010 sources: Rafique & Mi\u0161i\u0107 (2013) meta-analysis and Causevic et al. (2012) systematic review, to broaden the evidence base beyond the original three dated studies.",
+      "revised_section": "## 4. Supporting Evidence and Analysis\n\n| Study | Finding |\n|---|---|\n| Nagappan et al. (2008) \u2014 IBM/MS | 40\u201390% defect reduction; 15\u201335% longer dev time |\n| George & Williams (2003) | TDD-developed code passed 18% more functional black-box test cases in external quality assessment |\n| Madeyski (2010) meta-analysis | Small-to-medium positive effect on external code quality (branch coverage effect size d \u2248 0.23) |\n| Rafique & Mi\u0161i\u0107 (2013) meta-analysis | TDD showed statistically significant improvement in software quality across 27 studies; productivity effect was non-significant in industry settings |\n| Causevic et al. (2012) systematic review | Identified consistent quality benefits in professional settings; highlighted team experience as a key moderating variable |\n\nThe productivity cost (15\u201335% upfront) is generally recovered through reduced debugging and maintenance time.",
+      "status": "resolved"
+    },
+    {
+      "comment_id": "MAJOR-3",
+      "action": "Replaced the informal inline source list with a full References section using consistent APA-style formatting including journal, volume, issue, page range, and DOI for each source. Added entries for the two new post-2010 studies.",
+      "revised_section": "## References\n\nCausevic, A., Sundmark, D., & Punnekkat, S. (2012). Factors limiting industrial adoption of test driven development: A systematic review. *Proceedings of the 2012 IEEE Fifth International Conference on Software Testing, Verification and Validation (ICST)*, 337\u2013346. https://doi.org/10.1109/ICST.2012.112\n\nGeorge, B., & Williams, L. (2003). An initial investigation of test-driven development in industry. *Proceedings of the 2003 ACM Symposium on Applied Computing (SAC '03)*, 1135\u20131139. https://doi.org/10.1145/952532.952753\n\nMadeyski, L. (2010). *Test-driven development: An empirical evaluation of agile practice*. Springer. ISBN 978-3-642-04287-4. (Key finding: branch coverage effect size d \u2248 0.23 favoring TDD; see Chapter 5.)\n\nNagappan, N., Maximilien, E. M., Bhat, T., & Williams, L. (2008). Realizing quality improvement through test driven development: Results and experiences of four industrial teams. *Empirical Software Engineering*, 13(3), 289\u2013302. https://doi.org/10.1007/s10664-008-9062-z\n\nRafique, Y., & Mi\u0161i\u0107, V. B. (2013). The effects of test-driven development on external quality and productivity: A meta-analysis. *IEEE Transactions on Software Engineering*, 39(6), 835\u2013856. https://doi.org/10.1109/TSE.2012.28",
+      "status": "resolved"
+    },
+    {
+      "comment_id": "MAJOR-4",
+      "action": "Restated the George & Williams (2003) finding to accurately reflect that the 18% figure refers to externally assessed functional acceptance test pass rates, not an internal count of tests written, and added clarifying context.",
+      "revised_section": "| George & Williams (2003) | TDD-developed code passed 18% more functional black-box test cases in external quality assessment, reflecting higher external correctness rather than a larger internal test suite |",
+      "status": "resolved"
+    },
+    {
+      "comment_id": "MINOR-5",
+      "action": "Added a qualifier to the 'living documentation' bullet in Section 3 to note that this benefit depends on tests being written at the behavioral level, connecting it to the caveat already present in Section 5.",
+      "revised_section": "**Documentation**\n- Tests serve as living, executable documentation of intended behavior when written at the behavioral level; implementation-coupled tests lose this benefit as they break on refactoring rather than on behavioral regressions.\n- Reduces reliance on outdated written specs.",
+      "status": "resolved"
+    },
+    {
+      "comment_id": "MINOR-6",
+      "action": "Expanded the CI/CD recommendation in Section 5 with one actionable sentence on test pyramid composition to guide teams on granularity within a pipeline.",
+      "revised_section": "- **Combine with CI/CD** \u2014 automated test runs on every commit maximize TDD's defect-catching value. Structure tests as a pyramid: favor fast unit tests for the bulk of coverage, use integration tests to verify component contracts, and reserve end-to-end tests for critical user journeys to keep pipeline feedback loops short.",
+      "status": "resolved"
+    },
+    {
+      "comment_id": "MINOR-7",
+      "action": "Named the red-green-refactor cycle explicitly in the Introduction immediately after describing the three steps, aligning with standard TDD literature terminology.",
+      "revised_section": "## 2. Introduction\n\nTDD is a development practice where developers write a failing test (red), implement the minimum code to pass it (green), then refactor. This red-green-refactor cycle, formalized by Kent Beck in *Test-Driven Development: By Example* (2002), has since become a foundational agile practice. The 1999 *Extreme Programming Explained* introduced TDD as part of the broader XP methodology, but the 2002 book codified it as a standalone discipline.",
+      "status": "resolved"
+    }
+  ],
+  "agent": "claude-code",
+  "response_preview": "```json\n{\n  \"resolutions\": [\n    {\n      \"comment_id\": \"CRITICAL-1\",\n      \"action\": \"Updated Executive Summary defect reduction figure from '40\u201380%' to '40\u201390%' to match Nagappan et al. (2008) as cited in Section 3 and the evidence table.\",\n      \"revised_section\": \"## 1. Executive Summary\\n\\nTest-driven development (TDD) improves code quality, reduces defect rates, and supports maintainability by requiring tests to be written before production code. Evidence consistently shows TDD reduces bugs"
+}

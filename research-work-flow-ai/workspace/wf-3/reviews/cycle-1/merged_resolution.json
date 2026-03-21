@@ -1,0 +1,42 @@
+{
+  "cycle": 1,
+  "resolutions": [
+    {
+      "comment_id": "comment_1_beck_citation",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced 'Extreme Programming Explained' (1999) as the primary TDD reference with 'Test-Driven Development: By Example' (Beck, 2002), retaining the 1999 XP book as historical context."
+    },
+    {
+      "comment_id": "comment_2_defect_range_inconsistency",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Updated the Executive Summary to use '40\u201390%' to match the Nagappan et al. figure cited in Section 3 and the evidence table, eliminating the inconsistency."
+    },
+    {
+      "comment_id": "comment_6_publication_bias",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added a bullet point to the Limitations section acknowledging publication bias and the potential underrepresentation of null or negative results in the TDD literature."
+    },
+    {
+      "comment_id": "comment_5_incomplete_citations",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced the abbreviated inline source line with full bibliographic entries including authors, year, full title, journal/publisher, volume, issue, page range, and DOI where available."
+    },
+    {
+      "comment_id": "comment_3_george_williams_metric",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Clarified that '18% more passing test cases' refers to externally defined black-box acceptance tests, not simply a greater number of developer-written tests, and supplemented with the study's additional finding on code quality."
+    },
+    {
+      "comment_id": "comment_4_madeyski_vague",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added concrete quantified findings from Madeyski (2010), specifically effect sizes for branch coverage and fault detection, to give the citation equal evidentiary weight to the other two studies."
+    }
+  ],
+  "merged_at": "2026-03-21T10:29:33.309428+00:00"
+}

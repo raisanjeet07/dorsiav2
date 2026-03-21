@@ -1,0 +1,26 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "allowedOrigins": ["http://localhost:3000", "http://localhost:5173"]
+  },
+  "agents": {
+    "claude-code": {
+      "command": "claude",
+      "defaultModel": "claude-sonnet-4-20250514",
+      "env": {},
+      "extraArgs": ["--verbose"]
+    },
+    "cursor": {
+      "command": "cursor",
+      "defaultModel": "",
+      "extraArgs": []
+    },
+    "gemini": {
+      "command": "gemini",
+      "defaultModel": "gemini-2.5-pro",
+      "env": {},
+      "extraArgs": []
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "cycle": 2,
+  "resolutions": [
+    {
+      "comment_id": "roi_debate_uncharacterized_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Rewrote the Introduction to briefly characterize the ROI debate with three specific dimensions (upfront cost, test maintenance overhead, diminishing returns at high coverage) and explicitly explain how the three identified benefits address those concerns."
+    },
+    {
+      "comment_id": "executive_summary_sparse_minor",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Revised the Executive Summary to include the strongest supporting evidence (Nagappan et al. defect reduction figures), the primary recommendation, and a statement of scope \u2014 so a reader can assess the report's value without reading further."
+    },
+    {
+      "comment_id": "evidence_section_single_paragraph_critical",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded the evidence section from a single vague paragraph into a structured, source-specific analysis citing Nagappan et al. (2008), George & Williams (2004), Boehm's cost-of-defect model, the Stack Overflow Developer Survey (2022 and 2023 with specific metrics), and Feathers (2004). Each source is tied to a specific finding."
+    },
+    {
+      "comment_id": "findings_single_sentence_bullets_critical",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded each finding from a single-sentence bullet point into a dedicated subsection with a precise definition, a concrete code-level or team-level example, and quantitative or qualitative evidence linking the benefit to real-world outcomes."
+    },
+    {
+      "comment_id": "generic_recommendations_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Rewrote Section 5 to tie each recommendation directly to a specific cited finding, including Nagappan et al.'s defect density data, the DORA report's CI/CD findings, and the Stack Overflow documentation survey results."
+    },
+    {
+      "comment_id": "outdated_citations_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Supplemented Beck (2002) with post-2015 and post-2004 sources throughout the revised sections: the 2019 State of DevOps Report, Stack Overflow Developer Surveys (2022, 2023), Feathers (2004), and McConnell (2004 revised edition). The evidence section now spans 2002\u20132023 and includes findings directly applicable to CI/CD and modern development contexts."
+    },
+    {
+      "comment_id": "limitations_undeveloped_minor",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded the Limitations section to elaborate on both caveats with concrete conditions: described specific test patterns that produce false confidence (trivial assertions, over-mocking) and clarified the boundary between unit and integration test responsibility."
+    }
+  ],
+  "merged_at": "2026-03-21T10:46:51.617714+00:00"
+}

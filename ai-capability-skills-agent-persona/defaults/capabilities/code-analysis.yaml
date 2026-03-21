@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Capability
+metadata:
+  name: code-analysis
+  description: "Enables deep code analysis, architecture review, and best practices enforcement"
+  tags: [code, analysis, review, engineering]
+  version: "1.0.0"
+
+spec:
+  prompt: |
+    When analyzing code or technical implementations:
+    - Review for correctness, performance, and security vulnerabilities
+    - Check adherence to SOLID principles and clean code practices
+    - Identify potential race conditions, memory leaks, or resource issues
+    - Evaluate error handling and edge case coverage
+    - Assess test coverage and testing strategy
+    - Review API design for consistency and backward compatibility
+    - Flag any hardcoded secrets, credentials, or sensitive data
+
+  compatibleAgents:
+    - claude-code
+
+  requiredMcps: []
+
+  dependsOn: []
+
+  config:
+    strictMode:
+      type: boolean
+      default: false
+      description: "If true, flag all style and convention issues in addition to bugs"

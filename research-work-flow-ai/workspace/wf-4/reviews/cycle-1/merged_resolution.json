@@ -1,0 +1,48 @@
+{
+  "cycle": 1,
+  "resolutions": [
+    {
+      "comment_id": "evidence_base_critical",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Replaced vague citations with specific peer-reviewed studies (Causevic et al. 2011, Madeyski 2010, George & Williams 2004, Nagappan et al. 2008), specific Stack Overflow Developer Survey years with sample sizes and data points, and Boehm & Basili cost-of-defect figures. Added quantitative backing for all major claims."
+    },
+    {
+      "comment_id": "recommendations_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Rewrote all recommendations to ground each directly in specific cited evidence. Added concrete coverage thresholds, tooling categories, CI/CD integration guidance, measurable success criteria, and team workflow integration points derived from the findings."
+    },
+    {
+      "comment_id": "roi_debate_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added substantive engagement with the ROI debate in the Introduction, characterizing the opposing arguments (maintenance burden, diminishing returns at high coverage thresholds, context dependency) and explicitly scoping the report's position."
+    },
+    {
+      "comment_id": "findings_depth_critical",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Expanded each finding from a single bullet point into a full subsection with: (a) clear definition, (b) mechanism by which the benefit is produced, (c) empirical or case-study evidence, and (d) acknowledged limitations of the benefit."
+    },
+    {
+      "comment_id": "executive_summary_major",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Rewrote executive summary to include scope of research conducted, strength of evidence found, the primary recommendation, and significant caveats in 3-5 sentences."
+    },
+    {
+      "comment_id": "report_limitations_minor",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added a dedicated paragraph addressing the report's own methodological limitations: source selection bias, recency of evidence, generalizability across languages and domains, and absence of a formal systematic review protocol."
+    },
+    {
+      "comment_id": "methodology_minor",
+      "status": "single_perspective",
+      "agent": "claude-code",
+      "action": "Added a Methodology subsection (2.5) describing the research approach: sources/databases consulted, keywords used, inclusion and exclusion criteria, and date range of literature reviewed."
+    }
+  ],
+  "merged_at": "2026-03-21T10:43:56.085117+00:00"
+}
