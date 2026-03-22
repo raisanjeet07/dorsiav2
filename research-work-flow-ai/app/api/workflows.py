@@ -12,6 +12,7 @@ import structlog
 from websockets.connection import State as WsState
 
 from app.config import settings
+from app.models.database import Workflow as WorkflowORM
 from app.persistence.repositories import Repository
 
 logger = structlog.get_logger(__name__)
@@ -55,6 +56,24 @@ class WorkflowResponse(BaseModel):
     created_at: str
     updated_at: str
     completed_at: str | None
+
+
+def workflow_to_response(w: WorkflowORM) -> WorkflowResponse:
+    """Map ORM row to API model; coalesce NULL columns so Pydantic validation never fails."""
+    return WorkflowResponse(
+        workflow_id=w.workflow_id,
+        topic=w.topic or "",
+        context=w.context or "",
+        depth=w.depth or "standard",
+        current_state=w.current_state,
+        previous_state=w.previous_state,
+        review_cycle=w.review_cycle,
+        forced_consensus=w.forced_consensus,
+        workspace_path=w.workspace_path or "",
+        created_at=w.created_at.isoformat(),
+        updated_at=w.updated_at.isoformat(),
+        completed_at=w.completed_at.isoformat() if w.completed_at else None,
+    )
 
 
 class WorkflowListResponse(BaseModel):
@@ -154,23 +173,7 @@ async def list_workflows(
     try:
         workflows = await repository.list_workflows(state=state, limit=limit, offset=offset)
 
-        responses = [
-            WorkflowResponse(
-                workflow_id=w.workflow_id,
-                topic=w.topic,
-                context=w.context,
-                depth=w.depth,
-                current_state=w.current_state,
-                previous_state=w.previous_state,
-                review_cycle=w.review_cycle,
-                forced_consensus=w.forced_consensus,
-                workspace_path=w.workspace_path,
-                created_at=w.created_at.isoformat(),
-                updated_at=w.updated_at.isoformat(),
-                completed_at=w.completed_at.isoformat() if w.completed_at else None,
-            )
-            for w in workflows
-        ]
+        responses = [workflow_to_response(w) for w in workflows]
 
         return WorkflowListResponse(
             workflows=responses,
@@ -196,20 +199,7 @@ async def get_workflow(
         if not workflow:
             raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
 
-        return WorkflowResponse(
-            workflow_id=workflow.workflow_id,
-            topic=workflow.topic,
-            context=workflow.context,
-            depth=workflow.depth,
-            current_state=workflow.current_state,
-            previous_state=workflow.previous_state,
-            review_cycle=workflow.review_cycle,
-            forced_consensus=workflow.forced_consensus,
-            workspace_path=workflow.workspace_path,
-            created_at=workflow.created_at.isoformat(),
-            updated_at=workflow.updated_at.isoformat(),
-            completed_at=workflow.completed_at.isoformat() if workflow.completed_at else None,
-        )
+        return workflow_to_response(workflow)
     except HTTPException:
         raise
     except Exception as e:
@@ -323,6 +313,44 @@ async def get_current_report(
         raise
     except Exception as e:
         logger.exception("get_current_report.error", workflow_id=workflow_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/workflows/{workflow_id}/workspace-files", response_model=dict[str, Any])
+async def list_workflow_workspace_files(
+    request: Request, workflow_id: str, repository: Repository = Depends(get_repository)
+) -> dict[str, Any]:
+    """List files under this workflow's workspace directory (scoped to the workflow only)."""
+    workspace = request.app.state.workspace_manager
+
+    try:
+        wf = await repository.get_workflow(workflow_id)
+        if not wf:
+            raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+
+        root = workspace.get_workspace_path(workflow_id)
+        files: list[dict[str, Any]] = []
+        if root.is_dir():
+            for p in root.rglob("*"):
+                if p.is_file():
+                    rel = p.relative_to(root)
+                    files.append(
+                        {
+                            "path": str(rel).replace("\\", "/"),
+                            "size_bytes": p.stat().st_size,
+                        }
+                    )
+        files.sort(key=lambda x: x["path"])
+
+        return {
+            "workflow_id": workflow_id,
+            "workspace_path": str(root),
+            "files": files,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("list_workflow_workspace_files.error", workflow_id=workflow_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 

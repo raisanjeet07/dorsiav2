@@ -11,9 +11,28 @@ from app.agents.gateway_client import GatewayClient
 from app.agents.workspace import WorkspaceManager
 from app.config import settings
 from app.streaming.event_bus import EventBus
-from app.streaming.events import AgentStreamDeltaEvent, AgentStreamEndEvent, AgentStreamStartEvent
+from app.streaming.events import (
+    AgentSessionLifecycleEvent,
+    AgentStreamDeltaEvent,
+    AgentStreamEndEvent,
+    AgentStreamStartEvent,
+)
 
 logger = structlog.get_logger(__name__)
+
+
+def session_payload_process_id(payload: dict[str, Any]) -> int | None:
+    """Best-effort parse of agent subprocess PID from gateway session.created payload."""
+    v = payload.get("processId") if isinstance(payload, dict) else None
+    if v is None and isinstance(payload, dict):
+        v = payload.get("pid")
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v)
+    return None
 
 
 class AgentRole(ABC):
@@ -55,7 +74,7 @@ class AgentRole(ABC):
         working_dir: str | None = None,
         model: str | None = None,
         skills: list[str] | None = None,
-    ) -> None:
+    ) -> dict[str, Any]:
         """Ensure a session exists with the gateway.
 
         Creates the session if needed, then optionally attaches skills.
@@ -68,14 +87,18 @@ class AgentRole(ABC):
             model: Optional model name.
             skills: Optional list of skill names to attach.
 
+        Returns:
+            ``session.created`` payload from the gateway (may be empty on error).
+
         Raises:
             Exception: If session creation fails.
         """
+        payload: dict[str, Any] = {}
         try:
             session_config: dict[str, bool] = {}
             if flow == "claude-code" and settings.gateway_claude_disable_resume:
                 session_config["claudeDisableResume"] = True
-            await gateway.create_session(
+            payload = await gateway.create_session(
                 session_id=session_id,
                 flow=flow,
                 working_dir=working_dir,
@@ -115,6 +138,32 @@ class AgentRole(ABC):
                         skill=skill_name,
                         error=str(e),
                     )
+
+        return payload
+
+    async def _emit_agent_session_active(
+        self,
+        event_bus: EventBus,
+        workflow_id: str,
+        session_id: str,
+        flow: str,
+        workspace_dir: str,
+        display_role: str,
+        process_id: int | None = None,
+    ) -> None:
+        """Notify UI that a gateway session is active for this workflow phase."""
+        await event_bus.publish(
+            workflow_id,
+            AgentSessionLifecycleEvent(
+                workflow_id=workflow_id,
+                role=display_role,
+                session_id=session_id,
+                flow=flow,
+                workspace_dir=workspace_dir,
+                process_id=process_id,
+                status="active",
+            ),
+        )
 
     async def _stream_and_collect(
         self,

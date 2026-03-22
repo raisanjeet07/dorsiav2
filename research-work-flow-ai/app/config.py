@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     researcher_agent: str = "gemini"
     reviewer_agent: str = "claude-code"
     resolver_agents: list[str] = ["gemini", "claude-code"]
+    # When True, Gemini + Claude resolvers run concurrently (two gateway processes).
+    # Default False: run sequentially and end each gateway session before starting the next
+    # (avoids multiple CLI processes stacked during RESOLVING).
+    resolvers_parallel: bool = False
     researcher_model: str = ""
     reviewer_model: str = "claude-sonnet-4-6"
     resolver_claude_model: str = "claude-sonnet-4-6"

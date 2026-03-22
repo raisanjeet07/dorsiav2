@@ -5,10 +5,9 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-
-import structlog
 
 from app.agents.gateway_client import GatewayClient
 from app.agents.workspace import WorkspaceManager
@@ -19,11 +18,11 @@ from app.core.orchestrator import WorkflowOrchestrator
 from app.persistence.database import (
     async_session_factory,
     close_db,
-    engine,
     init_db,
 )
 from app.persistence.repositories import Repository
 from app.streaming.event_bus import EventBus
+from app.streaming.session_snapshot import GatewaySessionSnapshotStore
 
 logger = structlog.get_logger(__name__)
 
@@ -67,7 +66,11 @@ async def lifespan(app: FastAPI):
         raise
 
     # Initialize shared components
-    event_bus = EventBus(queue_size=1000)
+    gateway_session_snapshots = GatewaySessionSnapshotStore()
+    event_bus = EventBus(
+        queue_size=1000,
+        session_snapshot_store=gateway_session_snapshots,
+    )
     workspace_manager = WorkspaceManager(base_dir=settings.workspace_base_dir)
 
     # Create a long-lived session for the orchestrator's background tasks.
@@ -85,6 +88,7 @@ async def lifespan(app: FastAPI):
     # Store in app state
     app.state.gateway = gateway
     app.state.event_bus = event_bus
+    app.state.gateway_session_snapshots = gateway_session_snapshots
     app.state.workspace_manager = workspace_manager
     app.state.orchestrator = orchestrator
     app.state.session_factory = async_session_factory

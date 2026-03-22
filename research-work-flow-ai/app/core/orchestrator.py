@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator
+from typing import Any
 import uuid
 
 import structlog
@@ -27,6 +27,7 @@ from app.config import settings
 from app.persistence.repositories import Repository
 from app.streaming.event_bus import EventBus
 from app.streaming.events import (
+    AgentSessionLifecycleEvent,
     ReviewCommentsEvent,
     ResolutionMergedEvent,
     WorkflowCompletedEvent,
@@ -78,6 +79,67 @@ class WorkflowOrchestrator:
         self.report_generator = ReportGeneratorAgent()
 
         logger.info("orchestrator.initialized")
+
+    def _gateway_session_specs(self, workflow_id: str) -> list[tuple[str, str, str]]:
+        """All (session_id, gateway flow, role) pairs this workflow may create.
+
+        Used for best-effort cleanup on cancel or run exit so subprocesses are not left
+        running on the gateway.
+        """
+        return [
+            (f"{workflow_id}-researcher", settings.researcher_agent, "researcher"),
+            (f"{workflow_id}-reviewer", settings.reviewer_agent, "reviewer"),
+            (f"{workflow_id}-resolver-gemini", "gemini", "resolver-gemini"),
+            (f"{workflow_id}-resolver-claude", "claude-code", "resolver-claude"),
+            (f"{workflow_id}-user-chat", "claude-code", "user-chat"),
+            (f"{workflow_id}-final-report", "claude-code", "final-report"),
+        ]
+
+    async def _cleanup_all_gateway_sessions(self, workflow_id: str) -> None:
+        """End every known gateway session for this workflow (idempotent, logs at debug on miss)."""
+        for session_id, flow, role in self._gateway_session_specs(workflow_id):
+            try:
+                await self._end_gateway_session(workflow_id, session_id, flow, role)
+            except Exception as e:
+                logger.debug(
+                    "gateway.cleanup_session_skip",
+                    workflow_id=workflow_id,
+                    session_id=session_id,
+                    flow=flow,
+                    error=str(e),
+                )
+
+    async def _end_gateway_session(
+        self,
+        workflow_id: str,
+        session_id: str,
+        flow: str,
+        role: str,
+    ) -> None:
+        """End a gateway agent session and notify subscribers (kills subprocess on gateway)."""
+        wd = settings.gateway_agent_work_dir
+        try:
+            await self.gateway.end_session(session_id, flow)
+        except Exception as e:
+            logger.warning(
+                "gateway.end_session_failed",
+                workflow_id=workflow_id,
+                session_id=session_id,
+                flow=flow,
+                error=str(e),
+            )
+        await self.event_bus.publish(
+            workflow_id,
+            AgentSessionLifecycleEvent(
+                workflow_id=workflow_id,
+                role=role,
+                session_id=session_id,
+                flow=flow,
+                workspace_dir=wd,
+                process_id=None,
+                status="ended",
+            ),
+        )
 
     async def start_workflow(
         self,
@@ -253,6 +315,17 @@ class WorkflowOrchestrator:
                 )
             except Exception:
                 pass
+        finally:
+            # Best-effort: end any gateway sessions still bound to this workflow (e.g. user-chat
+            # on cancel, or after errors where per-phase finally did not run).
+            try:
+                await self._cleanup_all_gateway_sessions(workflow_id)
+            except Exception as e:
+                logger.warning(
+                    "run_workflow.gateway_cleanup_failed",
+                    workflow_id=workflow_id,
+                    error=str(e),
+                )
 
         logger.info("run_workflow.complete", workflow_id=workflow_id)
 
@@ -285,15 +358,23 @@ class WorkflowOrchestrator:
 
         if current_state == WorkflowState.RESEARCHING:
             agent = self.researcher
-            result = await agent.execute(
-                workflow_id=workflow_id,
-                context=context,
-                gateway=self.gateway,
-                event_bus=self.event_bus,
-                workspace=self.workspace,
-            )
-            # Transition to RESEARCH_COMPLETE
-            await self._transition(workflow_id, TransitionTrigger.AGENT_COMPLETE, {})
+            try:
+                result = await agent.execute(
+                    workflow_id=workflow_id,
+                    context=context,
+                    gateway=self.gateway,
+                    event_bus=self.event_bus,
+                    workspace=self.workspace,
+                )
+                # Transition to RESEARCH_COMPLETE
+                await self._transition(workflow_id, TransitionTrigger.AGENT_COMPLETE, {})
+            finally:
+                await self._end_gateway_session(
+                    workflow_id,
+                    self.researcher._build_session_id(workflow_id),
+                    settings.researcher_agent,
+                    "researcher",
+                )
 
         elif current_state == WorkflowState.REVIEWING:
             agent = self.reviewer
@@ -301,38 +382,46 @@ class WorkflowOrchestrator:
             latest_version = self.workspace.get_latest_report_version(workflow_id)
             context["report_version"] = latest_version or "draft-v1"
 
-            result = await agent.execute(
-                workflow_id=workflow_id,
-                context=context,
-                gateway=self.gateway,
-                event_bus=self.event_bus,
-                workspace=self.workspace,
-            )
-
-            review_comments = result.get("comments", [])
-            consensus = result.get("consensus", False)
-
-            await self._save_review(workflow_id, sm.review_cycle, result)
-
-            # Publish review comments event
-            await self.event_bus.publish(
-                workflow_id,
-                ReviewCommentsEvent(
+            try:
+                result = await agent.execute(
                     workflow_id=workflow_id,
-                    cycle=sm.review_cycle,
-                    comments=[c.get("comment", "") for c in review_comments],
-                    consensus=consensus,
-                    agent="claude-code",
-                ),
-            )
+                    context=context,
+                    gateway=self.gateway,
+                    event_bus=self.event_bus,
+                    workspace=self.workspace,
+                )
 
-            # First review always proceeds to REVIEW_COMPLETE → RESOLVING.
-            # consensus_yes is only valid from RE_REVIEWING.
-            await self._transition(
-                workflow_id,
-                TransitionTrigger.AGENT_COMPLETE,
-                {"consensus_reached": consensus},
-            )
+                review_comments = result.get("comments", [])
+                consensus = result.get("consensus", False)
+
+                await self._save_review(workflow_id, sm.review_cycle, result)
+
+                # Publish review comments event
+                await self.event_bus.publish(
+                    workflow_id,
+                    ReviewCommentsEvent(
+                        workflow_id=workflow_id,
+                        cycle=sm.review_cycle,
+                        comments=[c.get("comment", "") for c in review_comments],
+                        consensus=consensus,
+                        agent="claude-code",
+                    ),
+                )
+
+                # First review always proceeds to REVIEW_COMPLETE → RESOLVING.
+                # consensus_yes is only valid from RE_REVIEWING.
+                await self._transition(
+                    workflow_id,
+                    TransitionTrigger.AGENT_COMPLETE,
+                    {"consensus_reached": consensus},
+                )
+            finally:
+                await self._end_gateway_session(
+                    workflow_id,
+                    self.reviewer._build_session_id(workflow_id),
+                    settings.reviewer_agent,
+                    "reviewer",
+                )
 
         elif current_state == WorkflowState.RESOLVING:
             latest_version = self.workspace.get_latest_report_version(workflow_id)
@@ -354,111 +443,163 @@ class WorkflowOrchestrator:
                 ]
                 context["review_comments"] = comments
 
-            # Run both resolvers; tolerate individual failures so a single
-            # resolver outage doesn't block the whole workflow.
+            # Run resolvers. Important: end each gateway session as soon as that resolver
+            # finishes — otherwise the previous adapter subprocess stays alive while the next runs.
             gemini_result: dict[str, Any] = {"resolutions": [], "agent": "gemini"}
             claude_result: dict[str, Any] = {"resolutions": [], "agent": "claude-code"}
 
-            try:
-                gemini_result = await self.gemini_resolver.execute(
-                    workflow_id=workflow_id,
-                    context=context,
-                    gateway=self.gateway,
-                    event_bus=self.event_bus,
-                    workspace=self.workspace,
-                )
-            except Exception as e:
-                logger.warning(
-                    "resolver.gemini_failed",
-                    workflow_id=workflow_id,
-                    error=str(e),
-                )
+            async def _run_gemini() -> dict[str, Any]:
+                try:
+                    return await self.gemini_resolver.execute(
+                        workflow_id=workflow_id,
+                        context=context,
+                        gateway=self.gateway,
+                        event_bus=self.event_bus,
+                        workspace=self.workspace,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "resolver.gemini_failed",
+                        workflow_id=workflow_id,
+                        error=str(e),
+                    )
+                    return {"resolutions": [], "agent": "gemini"}
+
+            async def _run_claude() -> dict[str, Any]:
+                try:
+                    return await self.claude_resolver.execute(
+                        workflow_id=workflow_id,
+                        context=context,
+                        gateway=self.gateway,
+                        event_bus=self.event_bus,
+                        workspace=self.workspace,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "resolver.claude_failed",
+                        workflow_id=workflow_id,
+                        error=str(e),
+                    )
+                    return {"resolutions": [], "agent": "claude-code"}
 
             try:
-                claude_result = await self.claude_resolver.execute(
-                    workflow_id=workflow_id,
-                    context=context,
-                    gateway=self.gateway,
-                    event_bus=self.event_bus,
-                    workspace=self.workspace,
+                if settings.resolvers_parallel:
+                    gemini_result, claude_result = await asyncio.gather(
+                        _run_gemini(),
+                        _run_claude(),
+                    )
+                else:
+                    try:
+                        gemini_result = await _run_gemini()
+                    finally:
+                        await self._end_gateway_session(
+                            workflow_id,
+                            f"{workflow_id}-resolver-gemini",
+                            "gemini",
+                            "resolver-gemini",
+                        )
+                    try:
+                        claude_result = await _run_claude()
+                    finally:
+                        await self._end_gateway_session(
+                            workflow_id,
+                            f"{workflow_id}-resolver-claude",
+                            "claude-code",
+                            "resolver-claude",
+                        )
+
+                # Merge resolutions
+                merged = await self._merge_resolutions(
+                    workflow_id,
+                    sm.review_cycle,
+                    gemini_result,
+                    claude_result,
                 )
-            except Exception as e:
-                logger.warning(
-                    "resolver.claude_failed",
-                    workflow_id=workflow_id,
-                    error=str(e),
+
+                # Save merged resolutions
+                self.workspace.save_merged_resolution(
+                    workflow_id,
+                    sm.review_cycle,
+                    merged,
                 )
 
-            # Merge resolutions
-            merged = await self._merge_resolutions(
-                workflow_id,
-                sm.review_cycle,
-                gemini_result,
-                claude_result,
-            )
+                # Publish resolution merged event
+                await self.event_bus.publish(
+                    workflow_id,
+                    ResolutionMergedEvent(
+                        workflow_id=workflow_id,
+                        cycle=sm.review_cycle,
+                        resolutions=[r.get("action", "") for r in merged.get("resolutions", [])],
+                    ),
+                )
 
-            # Save merged resolutions
-            self.workspace.save_merged_resolution(
-                workflow_id,
-                sm.review_cycle,
-                merged,
-            )
-
-            # Publish resolution merged event
-            await self.event_bus.publish(
-                workflow_id,
-                ResolutionMergedEvent(
-                    workflow_id=workflow_id,
-                    cycle=sm.review_cycle,
-                    resolutions=[r.get("action", "") for r in merged.get("resolutions", [])],
-                ),
-            )
-
-            # Transition to RESOLUTION_COMPLETE
-            await self._transition(workflow_id, TransitionTrigger.AGENT_COMPLETE, {})
+                # Transition to RESOLUTION_COMPLETE
+                await self._transition(workflow_id, TransitionTrigger.AGENT_COMPLETE, {})
+            finally:
+                if settings.resolvers_parallel:
+                    await self._end_gateway_session(
+                        workflow_id,
+                        f"{workflow_id}-resolver-gemini",
+                        "gemini",
+                        "resolver-gemini",
+                    )
+                    await self._end_gateway_session(
+                        workflow_id,
+                        f"{workflow_id}-resolver-claude",
+                        "claude-code",
+                        "resolver-claude",
+                    )
 
         elif current_state == WorkflowState.RE_REVIEWING:
             agent = self.reviewer
             latest_version = self.workspace.get_latest_report_version(workflow_id)
             context["report_version"] = latest_version or "draft-v1"
 
-            result = await agent.execute(
-                workflow_id=workflow_id,
-                context=context,
-                gateway=self.gateway,
-                event_bus=self.event_bus,
-                workspace=self.workspace,
-            )
-
-            # Save review
-            await self._save_review(workflow_id, sm.review_cycle + 1, result)
-
-            # Check for consensus
-            consensus = result.get("consensus", False)
-
-            await self.event_bus.publish(
-                workflow_id,
-                ReviewCommentsEvent(
+            try:
+                result = await agent.execute(
                     workflow_id=workflow_id,
-                    cycle=sm.review_cycle + 1,
-                    comments=[c.get("comment", "") for c in result.get("comments", [])],
-                    consensus=consensus,
-                    agent="claude-code",
-                ),
-            )
-
-            # Transition based on consensus (or forced consensus)
-            if consensus:
-                await self._transition(
-                    workflow_id,
-                    TransitionTrigger.CONSENSUS_YES,
-                    {"consensus_reached": True},
+                    context=context,
+                    gateway=self.gateway,
+                    event_bus=self.event_bus,
+                    workspace=self.workspace,
                 )
-            else:
-                await self._transition(
+
+                # Save review
+                await self._save_review(workflow_id, sm.review_cycle + 1, result)
+
+                # Check for consensus
+                consensus = result.get("consensus", False)
+
+                await self.event_bus.publish(
                     workflow_id,
-                    TransitionTrigger.CONSENSUS_NO,
-                    {"consensus_reached": False},
+                    ReviewCommentsEvent(
+                        workflow_id=workflow_id,
+                        cycle=sm.review_cycle + 1,
+                        comments=[c.get("comment", "") for c in result.get("comments", [])],
+                        consensus=consensus,
+                        agent="claude-code",
+                    ),
+                )
+
+                # Transition based on consensus (or forced consensus)
+                if consensus:
+                    await self._transition(
+                        workflow_id,
+                        TransitionTrigger.CONSENSUS_YES,
+                        {"consensus_reached": True},
+                    )
+                else:
+                    await self._transition(
+                        workflow_id,
+                        TransitionTrigger.CONSENSUS_NO,
+                        {"consensus_reached": False},
+                    )
+            finally:
+                await self._end_gateway_session(
+                    workflow_id,
+                    self.reviewer._build_session_id(workflow_id),
+                    settings.reviewer_agent,
+                    "reviewer",
                 )
 
         elif current_state == WorkflowState.GENERATING_FINAL:
@@ -467,30 +608,38 @@ class WorkflowOrchestrator:
             context["report_version"] = latest_version or "draft-v1"
             context["user_approval_comments"] = workflow.config_json.get("user_approval_comments", "")
 
-            result = await agent.execute(
-                workflow_id=workflow_id,
-                context=context,
-                gateway=self.gateway,
-                event_bus=self.event_bus,
-                workspace=self.workspace,
-            )
-
-            # Transition to COMPLETED
-            await self._transition(
-                workflow_id,
-                TransitionTrigger.AGENT_COMPLETE,
-                {"final_report_path": result.get("final_report_path")},
-            )
-
-            # Publish completion event
-            await self.event_bus.publish(
-                workflow_id,
-                WorkflowCompletedEvent(
+            try:
+                result = await agent.execute(
                     workflow_id=workflow_id,
-                    final_report_path=result.get("final_report_path", ""),
-                    summary=result.get("summary", ""),
-                ),
-            )
+                    context=context,
+                    gateway=self.gateway,
+                    event_bus=self.event_bus,
+                    workspace=self.workspace,
+                )
+
+                # Transition to COMPLETED
+                await self._transition(
+                    workflow_id,
+                    TransitionTrigger.AGENT_COMPLETE,
+                    {"final_report_path": result.get("final_report_path")},
+                )
+
+                # Publish completion event
+                await self.event_bus.publish(
+                    workflow_id,
+                    WorkflowCompletedEvent(
+                        workflow_id=workflow_id,
+                        final_report_path=result.get("final_report_path", ""),
+                        summary=result.get("summary", ""),
+                    ),
+                )
+            finally:
+                await self._end_gateway_session(
+                    workflow_id,
+                    self.report_generator._build_session_id(workflow_id),
+                    "claude-code",
+                    "final-report",
+                )
 
     async def _transition(
         self,
@@ -567,15 +716,14 @@ class WorkflowOrchestrator:
         self,
         workflow_id: str,
         message: str,
-    ) -> AsyncGenerator[str, None]:
+    ) -> None:
         """Handle a user message during USER_REVIEW state.
+
+        Streams assistant output via the event bus as ``user.chat_response`` events.
 
         Args:
             workflow_id: The workflow ID.
             message: User message text.
-
-        Yields:
-            Response chunks from the chat agent.
 
         Raises:
             ValueError: If workflow not in USER_REVIEW state.
@@ -586,14 +734,14 @@ class WorkflowOrchestrator:
 
         logger.info("handle_user_message", workflow_id=workflow_id, message_length=len(message))
 
-        async for chunk in self.user_chat.send_message(
+        async for _chunk in self.user_chat.send_message(
             workflow_id=workflow_id,
             message=message,
             gateway=self.gateway,
             event_bus=self.event_bus,
             workspace=self.workspace,
         ):
-            yield chunk
+            pass
 
     async def handle_user_approve(
         self,
@@ -631,6 +779,14 @@ class WorkflowOrchestrator:
             TransitionTrigger.USER_APPROVE,
             {"approval_comment": comment},
         )
+
+        await self._end_gateway_session(
+            workflow_id,
+            f"{workflow_id}-user-chat",
+            "claude-code",
+            "user-chat",
+        )
+        self.user_chat._chat_sessions_announced.discard(workflow_id)
 
         return {
             "workflow_id": workflow_id,
@@ -675,6 +831,14 @@ class WorkflowOrchestrator:
             {"changes": changes},
         )
 
+        await self._end_gateway_session(
+            workflow_id,
+            f"{workflow_id}-user-chat",
+            "claude-code",
+            "user-chat",
+        )
+        self.user_chat._chat_sessions_announced.discard(workflow_id)
+
         return {
             "workflow_id": workflow_id,
             "new_state": WorkflowState.RESOLVING.value,
@@ -709,6 +873,9 @@ class WorkflowOrchestrator:
                 await task
             except asyncio.CancelledError:
                 pass
+
+        self.user_chat._chat_sessions_announced.discard(workflow_id)
+        await self._cleanup_all_gateway_sessions(workflow_id)
 
         return {
             "workflow_id": workflow_id,

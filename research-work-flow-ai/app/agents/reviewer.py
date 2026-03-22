@@ -7,7 +7,7 @@ from typing import Any
 
 import structlog
 
-from app.agents.base import AgentRole
+from app.agents.base import AgentRole, session_payload_process_id
 from app.agents.gateway_client import GatewayClient
 from app.agents.workspace import WorkspaceManager
 from app.config import settings
@@ -74,12 +74,22 @@ class ReviewerAgent(AgentRole):
 
         # Ensure session exists with reviewer persona
         session_id = self._build_session_id(workflow_id)
-        await self._ensure_session(
+        wd = settings.gateway_agent_work_dir
+        sess_payload = await self._ensure_session(
             gateway=gateway,
             session_id=session_id,
             flow=self.agent_flow,
-            working_dir=settings.gateway_agent_work_dir,
+            working_dir=wd,
             skills=["reviewer-persona"],  # Attach reviewer persona skill
+        )
+        await self._emit_agent_session_active(
+            event_bus,
+            workflow_id,
+            session_id,
+            self.agent_flow,
+            wd,
+            self.role_name,
+            process_id=session_payload_process_id(sess_payload),
         )
 
         # Stream and collect response

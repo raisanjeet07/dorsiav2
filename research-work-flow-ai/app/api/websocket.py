@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from typing import Any
 
+import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
-import structlog
-
+from app.persistence.repositories import Repository
 from app.streaming.events import serialize_event
 
 logger = structlog.get_logger(__name__)
@@ -25,15 +23,38 @@ async def handle_workflow_websocket(websocket: WebSocket, workflow_id: str) -> N
     """
     event_bus = websocket.app.state.event_bus
     orchestrator = websocket.app.state.orchestrator
-    repository = websocket.app.state.repository
 
-    # Validate workflow exists
-    workflow = await repository.get_workflow(workflow_id)
+    # Must accept the WebSocket before close/send; closing without accept can crash ASGI workers.
+    await websocket.accept()
+
+    # Validate workflow exists (per-request DB session — app.state has no shared repository)
+    session = websocket.app.state.session_factory()
+    repository = Repository(session)
+    workflow = None
+    lookup_error: Exception | None = None
+    try:
+        workflow = await repository.get_workflow(workflow_id)
+    except Exception as exc:
+        lookup_error = exc
+        logger.exception(
+            "websocket.workflow_lookup_failed",
+            workflow_id=workflow_id,
+            error=str(exc),
+        )
+    finally:
+        await session.close()
+
+    if lookup_error is not None:
+        try:
+            await websocket.close(code=1011, reason="Failed to load workflow")
+        except Exception:
+            pass
+        return
+
     if not workflow:
         await websocket.close(code=1008, reason="Workflow not found")
         return
 
-    await websocket.accept()
     logger.info("websocket.connected", workflow_id=workflow_id, client=websocket.client)
 
     # Send current state as first message
@@ -48,6 +69,20 @@ async def handle_workflow_websocket(websocket: WebSocket, workflow_id: str) -> N
         logger.exception("websocket.send_initial_state_failed", workflow_id=workflow_id, error=str(e))
         await websocket.close(code=1011, reason="Failed to send initial state")
         return
+
+    # Replay gateway session snapshots (agent.session) so clients that connect
+    # after the workflow already created sessions still see session rows.
+    try:
+        snap_store = getattr(websocket.app.state, "gateway_session_snapshots", None)
+        if snap_store is not None:
+            for row in snap_store.get_workflow(workflow_id):
+                await websocket.send_json(row)
+    except Exception as e:
+        logger.exception(
+            "websocket.snapshot_replay_failed",
+            workflow_id=workflow_id,
+            error=str(e),
+        )
 
     # Create tasks for bidirectional communication
     subscribe_task = None
@@ -102,16 +137,12 @@ async def handle_workflow_websocket(websocket: WebSocket, workflow_id: str) -> N
 
                             # Stream response chunks
                             try:
-                                async for chunk in orchestrator.handle_user_message(
+                                # Assistant chunks are published on the event bus as
+                                # ``user.chat_response`` and forwarded by event_stream().
+                                await orchestrator.handle_user_message(
                                     workflow_id=workflow_id,
                                     message=message,
-                                ):
-                                    await websocket.send_json({
-                                        "type": "user.chat_response",
-                                        "workflow_id": workflow_id,
-                                        "content": chunk,
-                                        "streaming": True,
-                                    })
+                                )
                             except ValueError as e:
                                 await websocket.send_json({
                                     "type": "error",

@@ -1,0 +1,136 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap");
+
+@import "tailwindcss";
+
+@layer theme {
+  :root {
+    /* Slightly lifted neutrals + amber accent — modern app feel */
+    --bg: #0c0c12;
+    --s1: #12121a;
+    --s2: #16161d;
+    --s3: #1d1d26;
+    --s4: #252530;
+    --bd: #20202c;
+    --bd2: #2c2c3a;
+    --a3: #fcd34d;
+    --a4: #fbbf24;
+    --a5: #f59e0b;
+    --a6: #d97706;
+    --g3: #4ade80;
+    --g6: #16a34a;
+    --b3: #93c5fd;
+    --b4: #60a5fa;
+    --b6: #2563eb;
+    --r3: #fca5a5;
+    --r6: #dc2626;
+    --v3: #c4b5fd;
+    --v5: #8b5cf6;
+    --t0: #fff;
+    --t1: #f0f0f8;
+    --t2: #b8b8cc;
+    --t3: #7a7a96;
+    --t4: #4a4a62;
+    --t5: #2e2e3e;
+    --nav: 52px;
+    --sb: 224px;
+
+    /* Aliases used in research pages */
+    --bg-2: var(--s1);
+    --bg-3: var(--s2);
+    --surface: rgba(18, 18, 26, 0.72);
+    --surface-solid: #12121a;
+    --ring: rgba(255, 255, 255, 0.06);
+  }
+}
+
+@layer base {
+  body {
+    @apply min-h-screen bg-[var(--bg)] text-[var(--t2)] antialiased;
+    /* next/font sets --font-inter on <body>; avoid @apply font-inter (Tailwind v4 + custom utilities) */
+    font-family: var(--font-inter), "Inter", sans-serif;
+  }
+
+  html {
+    font-family: "Inter", sans-serif;
+    scroll-behavior: smooth;
+  }
+
+  code,
+  pre {
+    font-family: "JetBrains Mono", monospace;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--s3);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--s4);
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-color: var(--s3) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer utilities {
+  .font-inter {
+    font-family: "Inter", sans-serif;
+  }
+
+  .font-mono {
+    font-family: "JetBrains Mono", monospace;
+  }
+
+  /** Elevated panel — cards, workflow sections */
+  .ds-surface {
+    border-radius: 1rem;
+    border: 1px solid var(--ring);
+    background: linear-gradient(
+      145deg,
+      rgba(22, 22, 32, 0.95) 0%,
+      rgba(14, 14, 20, 0.98) 100%
+    );
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+      0 12px 40px -12px rgba(0, 0, 0, 0.55);
+  }
+
+  .ds-page {
+    background-image: radial-gradient(
+      ellipse 120% 80% at 50% -20%,
+      rgba(245, 158, 11, 0.08),
+      transparent 50%
+    );
+  }
+
+  /** Compact dashboard cells — multi-column layouts */
+  .ds-tight {
+    border-radius: 0.375rem;
+  }
+
+  .wf-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  @media (min-width: 640px) {
+    .wf-grid {
+      gap: 0.625rem;
+    }
+  }
+}

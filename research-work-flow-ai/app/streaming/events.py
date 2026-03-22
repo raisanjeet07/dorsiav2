@@ -28,6 +28,7 @@ class EventType(str, Enum):
     USER_CHAT_RESPONSE = "user.chat_response"
     WORKFLOW_COMPLETED = "workflow.completed"
     WORKFLOW_ERROR = "workflow.error"
+    AGENT_SESSION = "agent.session"
 
 
 class WorkflowEvent(BaseModel):
@@ -56,6 +57,24 @@ class AgentStreamStartEvent(WorkflowEvent):
     role: str = Field(..., description="Agent role (researcher, reviewer, resolver)")
     agent: str = Field(..., description="Agent name (claude-code, gemini)")
     session_id: str = Field(..., description="Gateway session ID")
+
+
+class AgentSessionLifecycleEvent(WorkflowEvent):
+    """Gateway agent session started or ended (process lifecycle for UI)."""
+
+    type: Literal[EventType.AGENT_SESSION] = EventType.AGENT_SESSION
+    role: str = Field(..., description="Logical role (researcher, reviewer, resolver-gemini, ...)")
+    session_id: str = Field(..., description="Gateway session ID")
+    flow: str = Field(..., description="Gateway flow / agent type (e.g. gemini, claude-code)")
+    workspace_dir: str = Field(
+        default="",
+        description="Agent working directory on the gateway host (or workspace-file-service path)",
+    )
+    process_id: int | None = Field(
+        default=None,
+        description="OS PID of the agent subprocess when known (gateway may omit)",
+    )
+    status: Literal["active", "ended"] = Field(..., description="Whether the session is running or was closed")
 
 
 class AgentStreamDeltaEvent(WorkflowEvent):

@@ -9,8 +9,10 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"runtime"
 	"sync"
 	"sync/atomic"
+	"syscall"
 )
 
 // Process wraps an OS process with structured I/O handling.
@@ -90,6 +92,10 @@ func Spawn(ctx context.Context, opts SpawnOptions) (*Process, error) {
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return nil, fmt.Errorf("stderr pipe: %w", err)
+	}
+
+	if runtime.GOOS != "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}
 
 	if err := cmd.Start(); err != nil {
@@ -205,9 +211,15 @@ func (p *Process) Stop() error {
 		_ = p.stdin.Close()
 	}
 
-	// If the process doesn't exit on its own, kill it.
+	// If the process doesn't exit on its own, kill it (and its process group on Unix so
+	// CLI-spawned children don't linger after the parent dies).
 	if p.cmd.Process != nil {
-		_ = p.cmd.Process.Kill()
+		pid := p.cmd.Process.Pid
+		if runtime.GOOS != "windows" {
+			_ = syscall.Kill(-pid, syscall.SIGKILL)
+		} else {
+			_ = p.cmd.Process.Kill()
+		}
 	}
 	return nil
 }

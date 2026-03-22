@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import structlog
 
-from app.streaming.events import WorkflowEvent, serialize_event
+from app.streaming.events import AgentSessionLifecycleEvent, WorkflowEvent, serialize_event
+from app.streaming.session_snapshot import GatewaySessionSnapshotStore
 
 logger = structlog.get_logger(__name__)
 
@@ -25,13 +26,20 @@ class EventBus:
     Publish is non-blocking; if queue is full, events are dropped with a warning.
     """
 
-    def __init__(self, queue_size: int = 1000):
+    def __init__(
+        self,
+        queue_size: int = 1000,
+        session_snapshot_store: GatewaySessionSnapshotStore | None = None,
+    ):
         """Initialize the event bus.
 
         Args:
             queue_size: Maximum number of events per subscriber queue.
+            session_snapshot_store: If set, ``AgentSessionLifecycleEvent`` payloads
+                are recorded so WebSocket clients that connect later can replay them.
         """
         self.queue_size = queue_size
+        self._session_snapshots: GatewaySessionSnapshotStore | None = session_snapshot_store
         # workflow_id -> {subscriber_id -> queue}
         self.subscribers: dict[str, dict[str, asyncio.Queue[WorkflowEvent]]] = {}
         self._lock = asyncio.Lock()
@@ -74,6 +82,13 @@ class EventBus:
             workflow_id: ID of the workflow.
             event: Event to publish.
         """
+        if self._session_snapshots is not None and isinstance(
+            event, AgentSessionLifecycleEvent
+        ):
+            self._session_snapshots.record(
+                workflow_id, serialize_event(event)
+            )
+
         async with self._lock:
             subscribers = self.subscribers.get(workflow_id, {})
 
